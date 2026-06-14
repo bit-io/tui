@@ -1,0 +1,185 @@
+#!/usr/bin/hl
+/// tui demo — pokaz wszystkich komponentów biblioteki tui
+
+using <gen 2>
+
+# <bit/tui>
+
+-- tui_clear
+
+;; ── Nagłówek ──────────────────────────────────────────────────────────────────
+% _tui_box_w     = 60
+% _tui_box_title = " tui — Hacker Lang TUI Library "
+-- tui_box_top
+% _tui_box_content = "Witaj w bibliotece TUI dla Hacker Lang!"
+-- tui_box_row
+-- tui_box_bottom
+::nl
+
+;; ── Logi statusów ─────────────────────────────────────────────────────────────
+% _tui_sep_label = "Statusy"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _tui_log_msg = "Instalacja zakonczona pomyslnie"
+-- tui_log_ok
+% _tui_log_msg = "Znaleziono stara konfiguracje"
+-- tui_log_warn
+% _tui_log_msg = "Nie mozna polaczyc z serwerem"
+-- tui_log_err
+% _tui_log_msg = "Trwa synchronizacja danych..."
+-- tui_log_info
+% _tui_step_n     = 3
+% _tui_step_total = 7
+% _tui_log_msg    = "Kompilacja modulow"
+-- tui_log_step
+::nl
+
+;; ── Pasek postępu ─────────────────────────────────────────────────────────────
+% _tui_sep_label = "Postep"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _p = 0
+?~ @_p < 101
+    % _tui_pb_pct   = @_p
+    % _tui_pb_w     = 30
+    % _tui_pb_label = Pobieranie
+    -- tui_progress
+    >> bash -c "sleep 0.02"
+    $(@_p + 5) -> @_p
+done
+-- tui_progress_done
+::nl
+
+;; ── Spinner ───────────────────────────────────────────────────────────────────
+% _tui_sep_label = "Spinner"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _tui_spinner_style = dots
+% _f = 0
+?~ @_f < 15
+    % _tui_spin_msg = Analizowanie zaleznosci...
+    -- tui_spin
+    >> bash -c "sleep 0.08"
+    $(@_f + 1) -> @_f
+done
+% _tui_spin_result = Znaleziono 12 pakietow
+-- tui_spin_done
+::nl
+
+;; ── Pasek kroków ──────────────────────────────────────────────────────────────
+% _tui_sep_label = "Kroki"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _tui_total_steps = 5
+% _s = 1
+?~ @_s < 6
+    % _tui_step = @_s
+    -- tui_step_bar
+    >> bash -c "sleep 0.3"
+    $(@_s + 1) -> @_s
+done
+::nl
+
+;; ── Tabela ────────────────────────────────────────────────────────────────────
+% _tui_sep_label = "Tabela pakietow"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _tui_table_headers = "Pakiet|Wersja|Status"
+% _tui_table_widths  = "22|12|14"
+-- tui_table_header
+% _tui_table_row = "hashlib|v1.2.0|zainstalowany"
+-- tui_table_row
+% _tui_table_row = "tui|v0.1.0|zainstalowany"
+-- tui_table_row
+% _tui_table_row = "obsidian|v0.3.1|dostepny"
+-- tui_table_row
+-- tui_table_footer
+::nl
+
+;; ── KV pairs ──────────────────────────────────────────────────────────────────
+% _tui_kv_w   = 20
+% _tui_kv_key = System
+% _tui_kv_val = HackerOS gen 2
+-- tui_kv
+% _tui_kv_key = HL wersja
+% _tui_kv_val = gen 2
+-- tui_kv
+% _tui_kv_key = Pakiety
+% _tui_kv_val = 3 zainstalowane
+-- tui_kv
+::nl
+
+;; ── Input ─────────────────────────────────────────────────────────────────────
+% _tui_sep_label = "Input"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _tui_input_prompt = "Podaj swoje imie"
+-- tui_input
+% _tui_log_msg = "Witaj, @_tui_input_val!"
+-- tui_log_ok
+::nl
+
+% _tui_input_prompt  = "Katalog instalacji"
+% _tui_input_default = /usr/local
+-- tui_input_default
+~> Wybrano: @_tui_input_val
+::nl
+
+;; ── Potwierdzenie ─────────────────────────────────────────────────────────────
+% _tui_confirm_msg = "Kontynuowac instalacje?"
+-- tui_confirm
+? ok
+    % _tui_log_msg = "Instalacja potwierdzona"
+    -- tui_log_ok
+done
+? err
+    % _tui_log_msg = "Instalacja anulowana"
+    -- tui_log_warn
+done
+::nl
+
+;; ── Menu ──────────────────────────────────────────────────────────────────────
+% _tui_menu_title = "Wybierz akcje"
+% _tui_menu_items = "Zainstaluj pakiet|Zaktualizuj system|Sprawdz status|Wyjdz"
+-- tui_menu
+~> Wybrano: @_tui_menu_val (idx: @_tui_menu_idx)
+::nl
+
+;; ── Checkbox ──────────────────────────────────────────────────────────────────
+% _tui_check_items = "hashlib|tui|obsidian|json-tools|net-utils"
+-- tui_checklist
+~> Zaznaczono: @_tui_check_selected
+::nl
+
+;; ── Alerty ────────────────────────────────────────────────────────────────────
+% _tui_sep_label = "Alerty"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _tui_alert_msg  = "Operacja zakonczona pomyslnie!"
+% _tui_alert_type = ok
+-- tui_alert
+% _tui_alert_msg  = "Brak polaczenia z internetem"
+% _tui_alert_type = warn
+-- tui_alert
+% _tui_alert_msg  = "Krytyczny blad — nie mozna zapisac pliku"
+% _tui_alert_type = error
+-- tui_alert
+::nl
+
+::hr 50
+::bold Demo zakonczone!
+::hr 50
