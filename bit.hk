@@ -1,1 +1,11 @@
+[project]
+-> name        => tui
+-> version     => 0.1.0
+-> description => Hacker Lang TUI Library — interaktywne komponenty terminalowe
+-> entry       => source-code/lib.hl
+-> type        => hl
+-> author      => Bit Developers
+-> license     => MIT
+-> url         => https://github.com/bit-io/tui/
 
+[dependencies]
