@@ -1,0 +1,113 @@
+#!/usr/bin/hl
+/// installer.hl — przykładowy skrypt instalacyjny używający tui
+
+using <gen 2>
+
+# <bit/tui>
+
+-- tui_clear
+
+% _tui_box_w     = 56
+% _tui_box_title = " HackerOS Installer "
+-- tui_box_top
+% _tui_box_content = "Wersja 1.0.0  |  HackerOS Team"
+-- tui_box_row
+-- tui_box_sep
+% _tui_box_content = "Ten skrypt zainstaluje HackerOS na Twoim systemie."
+-- tui_box_row
+-- tui_box_bottom
+::nl
+
+;; Zbierz dane
+% _tui_input_prompt  = "Katalog instalacji"
+% _tui_input_default = /opt/hackeros
+-- tui_input_default
+% INSTALL_DIR = @_tui_input_val
+
+% _tui_check_items = "Hacker Lang|Narzedzia systemowe|Dokumentacja|Przyklady"
+-- tui_checklist
+% SELECTED_COMPONENTS = @_tui_check_selected
+
+% _tui_confirm_msg = "Rozpoczac instalacje?"
+-- tui_confirm
+? err
+    % _tui_log_msg = "Instalacja anulowana przez uzytkownika"
+    -- tui_log_warn
+    > exit 0
+done
+
+;; Instalacja
+% _tui_sep_label = "Instalacja"
+% _tui_sep_w     = 50
+-- tui_separator
+::nl
+
+% _tui_total_steps = 4
+
+% _tui_step_n     = 1
+% _tui_step_total = 4
+-- tui_step_bar
+% _tui_log_msg = "Tworzenie katalogow..."
+-- tui_log_info
+> mkdir -p @INSTALL_DIR
+% _tui_pb_pct = 25 
+% _tui_pb_w   = 40
+% _tui_pb_label = Postep
+-- tui_progress
+-- tui_progress_done
+
+% _tui_step_n = 2
+-- tui_step_bar
+% _tui_log_msg = "Kopiowanie plikow..."
+-- tui_log_info
+% _p2 = 25
+?~ @_p2 < 51
+    % _tui_pb_pct = @_p2
+    -- tui_progress
+    >> bash -c "sleep 0.05"
+    $(@_p2 + 1) -> @_p2
+done
+-- tui_progress_done
+
+% _tui_step_n = 3
+-- tui_step_bar
+% _tui_log_msg = "Konfiguracja srodowiska..."
+-- tui_log_info
+% _f2 = 0
+?~ @_f2 < 10
+    % _tui_spin_msg = Konfigurowanie...
+    -- tui_spin
+    >> bash -c "sleep 0.1"
+    $(@_f2 + 1) -> @_f2
+done
+% _tui_spin_result = "Konfiguracja OK"
+-- tui_spin_done
+
+% _tui_step_n = 4
+-- tui_step_bar
+% _tui_log_msg = "Weryfikacja instalacji..."
+-- tui_log_info
+% _p3 = 75
+?~ @_p3 < 101
+    % _tui_pb_pct = @_p3
+    -- tui_progress
+    >> bash -c "sleep 0.04"
+    $(@_p3 + 1) -> @_p3
+done
+-- tui_progress_done
+::nl
+
+;; Podsumowanie
+% _tui_box_w     = 56
+% _tui_box_title = " Instalacja zakonczona "
+-- tui_box_top
+% _tui_box_content = "Katalog: @INSTALL_DIR"
+-- tui_box_row
+% _tui_box_content = "Komponenty: @SELECTED_COMPONENTS"
+-- tui_box_row
+-- tui_box_bottom
+::nl
+
+% _tui_alert_msg  = "HackerOS zainstalowany pomyslnie!"
+% _tui_alert_type = ok
+-- tui_alert
