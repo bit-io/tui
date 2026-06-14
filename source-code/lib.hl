@@ -1,1 +1,538 @@
+#!/usr/bin/hl
+/// tui — Hacker Lang TUI Library (bit.io)
+/// Interaktywne komponenty terminalowe: menu, input, dialogi, tabele, progress, spinner
 
+using <gen 2>
+
+;; ── Kolory i style ────────────────────────────────────────────────────────────
+% TUI_RST    = \033[0m
+% TUI_BOLD   = \033[1m
+% TUI_DIM    = \033[2m
+% TUI_REV    = \033[7m
+% TUI_RED    = \033[31m
+% TUI_GRN    = \033[32m
+% TUI_YEL    = \033[33m
+% TUI_BLU    = \033[34m
+% TUI_MAG    = \033[35m
+% TUI_CYN    = \033[36m
+% TUI_WHT    = \033[37m
+% TUI_BRED   = \033[91m
+% TUI_BGRN   = \033[92m
+% TUI_BYEL   = \033[93m
+% TUI_BBLU   = \033[94m
+% TUI_BMAG   = \033[95m
+% TUI_BCYN   = \033[96m
+% TUI_BWHT   = \033[97m
+
+;; ── Znaki ramek ───────────────────────────────────────────────────────────────
+% TUI_H   = ─
+% TUI_V   = │
+% TUI_TL  = ╭
+% TUI_TR  = ╮
+% TUI_BL  = ╰
+% TUI_BR  = ╯
+% TUI_TM  = ┬
+% TUI_BM  = ┴
+% TUI_LM  = ├
+% TUI_RM  = ┤
+% TUI_CR  = ┼
+% TUI_ARR = ›
+% TUI_CHK = ✓
+% TUI_CRS = ✗
+% TUI_BUL = •
+% TUI_SPC = " "
+
+% TUI_LOADED = true
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; PRYMITYWY RYSOWANIA
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Wyczyść ekran
+: tui_clear def
+    >> bash -c "printf '\033[2J\033[H'"
+done
+
+;; Przesuń kursor: % _tui_row % _tui_col && -- tui_move
+: tui_move def
+    >> bash -c "printf '\033[@_tui_row;@_tui_cols_H'"
+done
+
+;; Ukryj/pokaż kursor
+: tui_hide_cursor def
+    >> bash -c "printf '\033[?25l'"
+done
+: tui_show_cursor def
+    >> bash -c "printf '\033[?25h'"
+done
+
+;; Szerokość terminala → @_tui_term_w, wysokość → @_tui_term_h
+: tui_term_size def
+    >> bash -c "tput cols  2>/dev/null || echo 80" |> @_tui_term_w
+    >> bash -c "tput lines 2>/dev/null || echo 24" |> @_tui_term_h
+done
+
+;; Wyśrodkuj tekst w szerokości @_tui_center_w
+: tui_center def
+    ;; % _tui_center_w = 50 && % _tui_text = "tekst" && -- tui_center
+    >> bash -c "
+        W='@_tui_center_w'
+        T='@_tui_text'
+        LEN=\${#T}
+        PAD=\$(( (W - LEN) / 2 ))
+        printf '%*s%s%*s' \$PAD '' \"\$T\" \$PAD ''
+    " |> @_tui_centered
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; RAMKI I OKNA
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Ramka z tytułem
+;; % _tui_box_w = 50 && % _tui_box_title = "Tytuł" && -- tui_box_top
+: tui_box_top def
+    >> bash -c "
+        W=@_tui_box_w
+        T='@_tui_box_title'
+        INNER=\$(( W - 2 ))
+        TLEN=\${#T}
+        LPAD=\$(( (INNER - TLEN - 2) / 2 ))
+        RPAD=\$(( INNER - TLEN - 2 - LPAD ))
+        printf '@TUI_CYN@TUI_TL'
+        printf '%*s' \$LPAD '' | tr ' ' '@TUI_H'
+        printf ' %s ' \"\$T\"
+        printf '%*s' \$RPAD '' | tr ' ' '@TUI_H'
+        printf '@TUI_TR@TUI_RST\n'
+    "
+done
+
+: tui_box_bottom def
+    >> bash -c "
+        W=@_tui_box_w
+        INNER=\$(( W - 2 ))
+        printf '@TUI_CYN@TUI_BL'
+        printf '%*s' \$INNER '' | tr ' ' '@TUI_H'
+        printf '@TUI_BR@TUI_RST\n'
+    "
+done
+
+: tui_box_row def
+    ;; % _tui_box_w % _tui_box_content && -- tui_box_row
+    >> bash -c "
+        W=@_tui_box_w
+        C='@_tui_box_content'
+        INNER=\$(( W - 2 ))
+        CLEN=\${#C}
+        PAD=\$(( INNER - CLEN ))
+        [ \$PAD -lt 0 ] && PAD=0
+        printf '@TUI_CYN@TUI_V@TUI_RST %s%*s @TUI_CYN@TUI_V@TUI_RST\n' \"\$C\" \$PAD ''
+    "
+done
+
+: tui_box_sep def
+    ;; Separator wewnątrz ramki
+    >> bash -c "
+        W=@_tui_box_w
+        INNER=\$(( W - 2 ))
+        printf '@TUI_CYN@TUI_LM'
+        printf '%*s' \$INNER '' | tr ' ' '@TUI_H'
+        printf '@TUI_RM@TUI_RST\n'
+    "
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; PASEK POSTĘPU
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; % _tui_pb_pct = 0..100 && % _tui_pb_w = 20 && % _tui_pb_label = "..." && -- tui_progress
+: tui_progress def
+    >> bash -c "
+        PCT=@_tui_pb_pct
+        W=@_tui_pb_w
+        LABEL='@_tui_pb_label'
+        FILL=\$(( PCT * W / 100 ))
+        EMPTY=\$(( W - FILL ))
+        DASHES=\$(( FILL > 0 ? FILL - 1 : 0 ))
+        BAR='['
+        i=0; while [ \$i -lt \$DASHES ]; do BAR=\"\${BAR}━\"; i=\$((\$i+1)); done
+        [ \$FILL -gt 0 ] && BAR=\"\${BAR}▶\"
+        i=0; while [ \$i -lt \$EMPTY ];  do BAR=\"\${BAR}─\"; i=\$((\$i+1)); done
+        BAR=\"\${BAR}]\"
+        printf '\r@TUI_DIM%-15s@TUI_RST @TUI_CYN%s@TUI_RST @TUI_BYEL[%3d%%]@TUI_RST' \"\$LABEL\" \"\$BAR\" \$PCT
+    "
+done
+
+: tui_progress_done def
+    ~>
+done
+
+;; Pasek postępu z krokami: % _tui_step = 1 && % _tui_total_steps = 5 && -- tui_step_bar
+: tui_step_bar def
+    >> bash -c "
+        S=@_tui_step
+        T=@_tui_total_steps
+        printf '@TUI_DIM['
+        for i in \$(seq 1 \$T); do
+            if [ \$i -lt \$S ]; then printf '@TUI_BGRN━@TUI_DIM'
+            elif [ \$i -eq \$S ]; then printf '@TUI_BCYN▶@TUI_DIM'
+            else printf '─'
+            fi
+        done
+        printf '] @TUI_RST@TUI_BOLD%d/%d@TUI_RST\n' \$S \$T
+    "
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; SPINNER
+;; ══════════════════════════════════════════════════════════════════════════════
+
+% _tui_spinner_frame = 0
+% _tui_spinner_style = dots
+
+;; Style: dots (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏) | line (|/-\) | arrow (←↖↑↗→↘↓↙) | bounce (⠁⠂⠄⡀⢀⠠⠐⠈)
+: tui_spin def
+    ;; % _tui_spinner_style = dots && % _tui_spin_msg = "Ładuję..." && -- tui_spin (w pętli)
+    >> bash -c "
+        FRAME=@_tui_spinner_frame
+        MSG='@_tui_spin_msg'
+        case '@_tui_spinner_style' in
+            dots)   FRAMES='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'; LEN=10 ;;
+            line)   FRAMES='|/-\\'; LEN=4 ;;
+            arrow)  FRAMES='←↖↑↗→↘↓↙'; LEN=8 ;;
+            bounce) FRAMES='⠁⠂⠄⡀⢀⠠⠐⠈'; LEN=8 ;;
+            *)      FRAMES='|/-\\'; LEN=4 ;;
+        esac
+        F=\$(( FRAME % LEN ))
+        CHAR=\$(printf '%s' \"\$FRAMES\" | cut -c\$(( F + 1 )))
+        printf '\r@TUI_BCYN%s@TUI_RST %s' \"\$CHAR\" \"\$MSG\"
+    "
+    $(@_tui_spinner_frame + 1) -> @_tui_spinner_frame
+done
+
+: tui_spin_done def
+    ;; % _tui_spin_result = "OK" && -- tui_spin_done
+    >> bash -c "printf '\r@TUI_BGRN@TUI_CHK@TUI_RST %s\n' '@_tui_spin_result'"
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; MENU INTERAKTYWNE
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Menu strzałkowe (używa bash read -sn1)
+;; % _tui_menu_title = "Wybierz" && % _tui_menu_items = "Op1|Op2|Op3" && -- tui_menu
+;; Wynik: @_tui_menu_idx (0-based), @_tui_menu_val
+: tui_menu def
+    >> bash -c "
+        TITLE='@_tui_menu_title'
+        IFS='|' read -ra ITEMS <<< '@_tui_menu_items'
+        COUNT=\${#ITEMS[@]}
+        SEL=0
+
+        draw() {
+            printf '\033[2J\033[H'
+            printf '@TUI_BOLD@TUI_CYN %s @TUI_RST\n\n' \"\$TITLE\"
+            for i in \"\${!ITEMS[@]}\"; do
+                if [ \$i -eq \$SEL ]; then
+                    printf '  @TUI_REV @TUI_BRED@TUI_ARR@TUI_RST@TUI_REV %-40s @TUI_RST\n' \"\${ITEMS[\$i]}\"
+                else
+                    printf '    %-40s\n' \"\${ITEMS[\$i]}\"
+                fi
+            done
+            printf '\n@TUI_DIM  ↑↓ nawigacja  Enter wybór  q wyjście@TUI_RST\n'
+        }
+
+        printf '\033[?25l'
+        while true; do
+            draw
+            IFS= read -rsn1 KEY
+            case \"\$KEY\" in
+                \$'\\033')
+                    IFS= read -rsn2 -t 0.1 SEQ
+                    case \"\$SEQ\" in
+                        '[A') SEL=\$(( (SEL - 1 + COUNT) % COUNT )) ;;
+                        '[B') SEL=\$(( (SEL + 1) % COUNT ))          ;;
+                    esac
+                    ;;
+                '') echo \$SEL; break ;;
+                q|Q) echo -1; break ;;
+                [0-9])
+                    [ \"\$KEY\" -lt \"\$COUNT\" ] && SEL=\$KEY && echo \$SEL && break
+                    ;;
+            esac
+        done
+        printf '\033[?25h'
+    " |> @_tui_menu_idx
+
+    >> bash -c "
+        IFS='|' read -ra ITEMS <<< '@_tui_menu_items'
+        echo \"\${ITEMS[@_tui_menu_idx]}\"
+    " |> @_tui_menu_val
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; INPUT
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Linia wejściowa z promptem: % _tui_input_prompt && -- tui_input → @_tui_input_val
+: tui_input def
+    >> bash -c "
+        printf '@TUI_CYN@TUI_ARR@TUI_RST @TUI_BOLD@_tui_input_prompt@TUI_RST '
+        IFS= read -r VAL
+        echo \"\$VAL\"
+    " |> @_tui_input_val
+done
+
+;; Input z wartością domyślną: % _tui_input_default && -- tui_input_default
+: tui_input_default def
+    >> bash -c "
+        printf '@TUI_CYN@TUI_ARR@TUI_RST @TUI_BOLD@_tui_input_prompt@TUI_RST [@TUI_DIM@_tui_input_default@TUI_RST]: '
+        IFS= read -r VAL
+        [ -z \"\$VAL\" ] && VAL='@_tui_input_default'
+        echo \"\$VAL\"
+    " |> @_tui_input_val
+done
+
+;; Input hasła (ukryty): % _tui_input_prompt && -- tui_input_password → @_tui_input_val
+: tui_input_password def
+    >> bash -c "
+        printf '@TUI_CYN@TUI_ARR@TUI_RST @TUI_BOLD@_tui_input_prompt@TUI_RST '
+        IFS= read -rs VAL
+        echo
+        echo \"\$VAL\"
+    " |> @_tui_input_val
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; DIALOGI POTWIERDZENIA
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Tak/Nie: % _tui_confirm_msg && -- tui_confirm → exit 0=tak, 1=nie
+: tui_confirm def
+    >> bash -c "
+        printf '@TUI_BYEL?@TUI_RST @TUI_BOLD@_tui_confirm_msg@TUI_RST [@TUI_BGRNT@TUI_RST/@TUI_REDn@TUI_RST]: '
+        IFS= read -r ANS
+        case \"\$ANS\" in
+            y|Y|t|T|tak|yes|Yes|YES) exit 0 ;;
+            *) exit 1 ;;
+        esac
+    "
+done
+
+;; Alert box: % _tui_alert_msg % _tui_alert_type (ok|warn|error) && -- tui_alert
+: tui_alert def
+    >> bash -c "
+        MSG='@_tui_alert_msg'
+        case '@_tui_alert_type' in
+            ok)    ICON='@TUI_BGRN@TUI_CHK@TUI_RST' ; COL='@TUI_BGRN' ;;
+            warn)  ICON='@TUI_BYEL⚠@TUI_RST'        ; COL='@TUI_BYEL' ;;
+            error) ICON='@TUI_BRED@TUI_CRS@TUI_RST'  ; COL='@TUI_BRED' ;;
+            *)     ICON='@TUI_BCYN●@TUI_RST'         ; COL='@TUI_BCYN' ;;
+        esac
+        W=\$(( \${#MSG} + 6 ))
+        [ \$W -lt 40 ] && W=40
+        INNER=\$(( W - 2 ))
+        printf \"%s%*s%s\n\" \"${COL}╭\" \$INNER '' \"╮${TUI_RST}\" | tr ' ' '─'
+        printf \"%s %s %-\$(( INNER - 4 ))s %s\n\" \"${COL}│${TUI_RST}\" \"\$ICON\" \"\$MSG\" \"${COL}│${TUI_RST}\"
+        printf \"%s%*s%s\n\" \"${COL}╰\" \$INNER '' \"╯${TUI_RST}\" | tr ' ' '─'
+    "
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; TABELA
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Tabela z nagłówkiem
+;; % _tui_table_headers = "Kolumna 1|Kolumna 2|Kolumna 3"
+;; % _tui_table_widths  = "20|15|10"   (szerokości kolumn)
+;; -- tui_table_header
+: tui_table_header def
+    >> bash -c "
+        IFS='|' read -ra HDRS <<< '@_tui_table_headers'
+        IFS='|' read -ra WIDS <<< '@_tui_table_widths'
+        COUNT=\${#HDRS[@]}
+
+        ;; Górna ramka
+        printf '@TUI_CYN@TUI_TL'
+        for i in \"\${!WIDS[@]}\"; do
+            printf '%*s' \${WIDS[\$i]} '' | tr ' ' '─'
+            [ \$i -lt \$(( COUNT - 1 )) ] && printf '@TUI_TM'
+        done
+        printf '@TUI_TR@TUI_RST\n'
+
+        ;; Nagłówki
+        printf '@TUI_CYN@TUI_V@TUI_RST'
+        for i in \"\${!HDRS[@]}\"; do
+            printf '@TUI_BOLD @TUI_BCYN%-\$(( \${WIDS[\$i]} - 1 ))s@TUI_RST' \"\${HDRS[\$i]}\"
+            printf '@TUI_CYN@TUI_V@TUI_RST'
+        done
+        printf '\n'
+
+        ;; Separator
+        printf '@TUI_CYN@TUI_LM'
+        for i in \"\${!WIDS[@]}\"; do
+            printf '%*s' \${WIDS[\$i]} '' | tr ' ' '─'
+            [ \$i -lt \$(( COUNT - 1 )) ] && printf '@TUI_CR'
+        done
+        printf '@TUI_RM@TUI_RST\n'
+    "
+done
+
+;; Wiersz tabeli: % _tui_table_row = "val1|val2|val3" && -- tui_table_row
+: tui_table_row def
+    >> bash -c "
+        IFS='|' read -ra VALS <<< '@_tui_table_row'
+        IFS='|' read -ra WIDS <<< '@_tui_table_widths'
+        COUNT=\${#WIDS[@]}
+        printf '@TUI_CYN@TUI_V@TUI_RST'
+        for i in \"\${!WIDS[@]}\"; do
+            V=\"\${VALS[\$i]:-}\"
+            printf ' %-\$(( \${WIDS[\$i]} - 1 ))s' \"\$V\"
+            printf '@TUI_CYN@TUI_V@TUI_RST'
+        done
+        printf '\n'
+    "
+done
+
+: tui_table_footer def
+    >> bash -c "
+        IFS='|' read -ra WIDS <<< '@_tui_table_widths'
+        COUNT=\${#WIDS[@]}
+        printf '@TUI_CYN@TUI_BL'
+        for i in \"\${!WIDS[@]}\"; do
+            printf '%*s' \${WIDS[\$i]} '' | tr ' ' '─'
+            [ \$i -lt \$(( COUNT - 1 )) ] && printf '@TUI_BM'
+        done
+        printf '@TUI_BR@TUI_RST\n'
+    "
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; POWIADOMIENIA I STATUSY
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; % _tui_log_msg && -- tui_log_ok / tui_log_warn / tui_log_err / tui_log_info
+: tui_log_ok def
+    >> bash -c "printf '  @TUI_BGRN@TUI_CHK@TUI_RST  %s\n' '@_tui_log_msg'"
+done
+: tui_log_warn def
+    >> bash -c "printf '  @TUI_BYEL⚠@TUI_RST   %s\n' '@_tui_log_msg'"
+done
+: tui_log_err def
+    >> bash -c "printf '  @TUI_BRED@TUI_CRS@TUI_RST  %s\n' '@_tui_log_msg'" 1>&2
+done
+: tui_log_info def
+    >> bash -c "printf '  @TUI_BCYN●@TUI_RST  %s\n' '@_tui_log_msg'"
+done
+: tui_log_step def
+    ;; % _tui_step_n % _tui_step_total % _tui_log_msg && -- tui_log_step
+    >> bash -c "printf '  @TUI_DIM[@_tui_step_n/@_tui_step_total]@TUI_RST @TUI_BOLD%s@TUI_RST\n' '@_tui_log_msg'"
+done
+
+;; Badge: % _tui_badge_text % _tui_badge_color (red|green|yellow|cyan|magenta) && -- tui_badge
+: tui_badge def
+    >> bash -c "
+        case '@_tui_badge_color' in
+            red)     C='@TUI_BRED' ;;
+            green)   C='@TUI_BGRN' ;;
+            yellow)  C='@TUI_BYEL' ;;
+            cyan)    C='@TUI_BCYN' ;;
+            magenta) C='@TUI_BMAG' ;;
+            *)       C='@TUI_BWHT' ;;
+        esac
+        printf \"%s @TUI_RST@TUI_BOLD %s @TUI_RST%s\" \"\$C\" '@_tui_badge_text' \"\$C\"
+    "
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; LISTA WYBORU (checkbox)
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Checkbox list: % _tui_check_items = "Item1|Item2|Item3"
+;; Wynik: @_tui_check_selected (pipe-separated wybrane)
+: tui_checklist def
+    >> bash -c "
+        IFS='|' read -ra ITEMS <<< '@_tui_check_items'
+        COUNT=\${#ITEMS[@]}
+        declare -a CHECKED
+        for i in \"\${!ITEMS[@]}\"; do CHECKED[\$i]=0; done
+        SEL=0
+
+        draw() {
+            printf '\033[2J\033[H'
+            printf '@TUI_BOLD@TUI_CYN Wybierz (Space = zaznacz, Enter = potwierdź): @TUI_RST\n\n'
+            for i in \"\${!ITEMS[@]}\"; do
+                if [ \${CHECKED[\$i]} -eq 1 ]; then
+                    BOX='@TUI_BGRN[@TUI_CHK]@TUI_RST'
+                else
+                    BOX='@TUI_DIM[ ]@TUI_RST'
+                fi
+                if [ \$i -eq \$SEL ]; then
+                    printf '  @TUI_REV %s %-38s @TUI_RST\n' \"\$BOX\" \"\${ITEMS[\$i]}\"
+                else
+                    printf '  %s %-38s\n' \"\$BOX\" \"\${ITEMS[\$i]}\"
+                fi
+            done
+            printf '\n@TUI_DIM  ↑↓ nawigacja  Spacja zaznacz  Enter potwierdź@TUI_RST\n'
+        }
+
+        printf '\033[?25l'
+        while true; do
+            draw
+            IFS= read -rsn1 KEY
+            case \"\$KEY\" in
+                \$'\\033')
+                    IFS= read -rsn2 -t 0.1 SEQ
+                    case \"\$SEQ\" in
+                        '[A') SEL=\$(( (SEL - 1 + COUNT) % COUNT )) ;;
+                        '[B') SEL=\$(( (SEL + 1) % COUNT ))          ;;
+                    esac
+                    ;;
+                ' ') CHECKED[\$SEL]=\$(( 1 - \${CHECKED[\$SEL]} )) ;;
+                '') break ;;
+            esac
+        done
+        printf '\033[?25h'
+
+        RESULT=''
+        for i in \"\${!ITEMS[@]}\"; do
+            [ \${CHECKED[\$i]} -eq 1 ] && RESULT=\"\${RESULT}\${RESULT:+|}\${ITEMS[\$i]}\"
+        done
+        echo \"\$RESULT\"
+    " |> @_tui_check_selected
+done
+
+;; ══════════════════════════════════════════════════════════════════════════════
+;; LAYOUT HELPERS
+;; ══════════════════════════════════════════════════════════════════════════════
+
+;; Separator z etykietą: % _tui_sep_label % _tui_sep_w && -- tui_separator
+: tui_separator def
+    >> bash -c "
+        L='@_tui_sep_label'
+        W=@_tui_sep_w
+        LLEN=\${#L}
+        LEFT=\$(( (W - LLEN - 2) / 2 ))
+        RIGHT=\$(( W - LLEN - 2 - LEFT ))
+        printf '@TUI_DIM'
+        printf '%*s' \$LEFT '' | tr ' ' '─'
+        printf '@TUI_RST @TUI_BOLD%s@TUI_RST @TUI_DIM' \"\$L\"
+        printf '%*s' \$RIGHT '' | tr ' ' '─'
+        printf '@TUI_RST\n'
+    "
+done
+
+;; Dwie kolumny: % _tui_col1 % _tui_col2 % _tui_col_w && -- tui_two_col
+: tui_two_col def
+    >> bash -c "
+        W=@_tui_col_w
+        printf '%-\${W}s  %s\n' '@_tui_col1' '@_tui_col2'
+    "
+done
+
+;; Klucz: wartość: % _tui_kv_key % _tui_kv_val % _tui_kv_w && -- tui_kv
+: tui_kv def
+    >> bash -c "
+        W=@_tui_kv_w
+        printf '@TUI_DIM%-\${W}s@TUI_RST %s\n' '@_tui_kv_key:' '@_tui_kv_val'
+    "
+done
