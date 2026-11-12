@@ -1,4 +1,4 @@
-use "bytes -> tui" from "tui"
+use "bit -> tui" from "tui"
 
 struct Model is
     pub tasks: any
@@ -12,7 +12,8 @@ fn init() -> any is
     return Model { tasks: tasks, progress: progress, timer: tui::timer_new() }
 end
 
-fn update(model: any, msg: any) -> any is
+fn update(model_any: any, msg: any) -> (any, fn() -> any) is
+    let model: Model = model_any
     if tui::is_ctrl_c(msg) || tui::msg_is_key(msg, "q") is
         return (model, tui::cmd_quit())
     end
@@ -26,7 +27,8 @@ fn update(model: any, msg: any) -> any is
     return (Model { tasks: next_tasks, progress: model.progress, timer: model.timer }, tui::cmd_none())
 end
 
-fn view(model: any) -> string is
+fn view(model_any: any) -> string is
+    let model: Model = model_any
     let title_style: any = tui::style_bold(tui::style_fg(tui::style_new(), "cyan"), true)
     let panel: any = tui::style_padding(tui::style_border(tui::style_new(), "rounded"), 2, 1)
 
