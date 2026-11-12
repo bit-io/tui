@@ -142,8 +142,26 @@ fn strip_ansi(s: string) -> string is
     return out
 end
 
+;; Number of Unicode code points (terminal columns, for the non-wide characters this
+;; library draws). The C++ backend of h# 0.9.0 slices strings *by byte*, so
+;; `char_count` returns the byte length — which made every box-drawing character
+;; ("│" = 3 bytes) count as 3 columns, and `join_horizontal` / `pad_right`
+;; padded blocks to ~3x their real width. UTF-8 continuation bytes (0x80..0xBF)
+;; don't start a character, so skip them.
+fn utf8_count(s: string) -> int is
+    let n: int = s.len()
+    let mut cnt: int = 0
+    let mut i: int = 0
+    while i < n is
+        let b: int = __builtin_str_to_char_code(s[i..i + 1])
+        if b < 128 || b >= 192 is cnt = cnt + 1 end
+        i = i + 1
+    end
+    return cnt
+end
+
 fn visible_len(s: string) -> int is
-    return char_count(strip_ansi(s))
+    return utf8_count(strip_ansi(s))
 end
 
 
