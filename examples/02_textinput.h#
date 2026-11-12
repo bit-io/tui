@@ -1,4 +1,4 @@
-use "bytes -> tui" from "tui"
+use "bit -> tui" from "tui"
 
 struct Model is
     pub input: any
@@ -10,7 +10,8 @@ fn init() -> any is
     return Model { input: ti, submitted: "" }
 end
 
-fn update(model: any, msg: any) -> any is
+fn update(model_any: any, msg: any) -> (any, fn() -> any) is
+    let model: Model = model_any
     if tui::is_ctrl_c(msg) is
         return (model, tui::cmd_quit())
     end
@@ -34,7 +35,8 @@ fn update(model: any, msg: any) -> any is
     return (Model { input: next_input, submitted: model.submitted }, tui::cmd_none())
 end
 
-fn view(model: any) -> string is
+fn view(model_any: any) -> string is
+    let model: Model = model_any
     let title: any = tui::style_bold(tui::style_fg(tui::style_new(), "cyan"), true)
     let box_: any = tui::style_padding(tui::style_border(tui::style_new(), "rounded"), 2, 1)
 
