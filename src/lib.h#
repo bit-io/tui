@@ -428,51 +428,63 @@ pub fn custom_msg(data: string) -> any is
     return Msg { kind: "custom", key: "", width: 0, height: 0, data: data }
 end
 
-pub fn msg_kind(m: any) -> string is
+pub fn msg_kind(m_any: any) -> string is
+    let m: Msg = m_any
     return m.kind
 end
 
-pub fn msg_key(m: any) -> string is
+pub fn msg_key(m_any: any) -> string is
+    let m: Msg = m_any
     return m.key
 end
 
-pub fn msg_data(m: any) -> string is
+pub fn msg_data(m_any: any) -> string is
+    let m: Msg = m_any
     return m.data
 end
 
-pub fn msg_width(m: any) -> int is
+pub fn msg_width(m_any: any) -> int is
+    let m: Msg = m_any
     return m.width
 end
 
-pub fn msg_height(m: any) -> int is
+pub fn msg_height(m_any: any) -> int is
+    let m: Msg = m_any
     return m.height
 end
 
-pub fn msg_is(m: any, kind: string) -> bool is
+pub fn msg_is(m_any: any, kind: string) -> bool is
+    let m: Msg = m_any
     return m.kind == kind
 end
 
-pub fn msg_is_key(m: any, key: string) -> bool is
+pub fn msg_is_key(m_any: any, key: string) -> bool is
+    let m: Msg = m_any
     return m.kind == "key" && m.key == key
 end
 
-pub fn msg_is_any_key(m: any) -> bool is
+pub fn msg_is_any_key(m_any: any) -> bool is
+    let m: Msg = m_any
     return m.kind == "key"
 end
 
-pub fn msg_is_tick(m: any) -> bool is
+pub fn msg_is_tick(m_any: any) -> bool is
+    let m: Msg = m_any
     return m.kind == "tick"
 end
 
-pub fn msg_is_resize(m: any) -> bool is
+pub fn msg_is_resize(m_any: any) -> bool is
+    let m: Msg = m_any
     return m.kind == "resize"
 end
 
-pub fn msg_is_quit(m: any) -> bool is
+pub fn msg_is_quit(m_any: any) -> bool is
+    let m: Msg = m_any
     return m.kind == "quit"
 end
 
-pub fn msg_is_custom(m: any) -> bool is
+pub fn msg_is_custom(m_any: any) -> bool is
+    let m: Msg = m_any
     return m.kind == "custom"
 end
 
@@ -481,7 +493,8 @@ end
 ;; your own `update` as a *suggestion* — e.g. `if tui::should_quit(msg) ...`
 ;; — most real apps only want ctrl+c to be unconditional and want "q"/esc
 ;; to behave differently depending on which screen/mode they're in).
-pub fn is_ctrl_c(m: any) -> bool is
+pub fn is_ctrl_c(m_any: any) -> bool is
+    let m: Msg = m_any
     return m.kind == "key" && m.key == "ctrl+c"
 end
 
@@ -528,7 +541,7 @@ end
 ;; ── the program loop ─────────────────────────────────────────────────────
 ;;
 ;; `init`   : fn() -> any                 — build the first model
-;; `update` : fn(any, any) -> any         — (model, msg) -> (new_model, cmd) tuple
+;; `update` : fn(any, any) -> (any, fn() -> any) — (model, msg) -> (new_model, cmd)
 ;; `view`   : fn(any) -> string           — model -> the frame to draw
 ;;
 ;; `update`'s return value is a 2-tuple `(new_model, cmd)` — build it with a
@@ -545,7 +558,7 @@ end
 ;; misbehaving `update` can never strand the terminal in raw mode.
 ;;
 ;; Returns whatever the final model was when the program quit.
-pub fn run(init: fn() -> any, update: fn(any, any) -> any, view: fn(any) -> string) -> any is
+pub fn run(init: fn() -> any, update: fn(any, any) -> (any, fn() -> any), view: fn(any) -> string) -> any is
     let saved: string = enable_raw_mode()
     enter_alt_screen()
     hide_cursor()
@@ -574,7 +587,7 @@ pub fn run(init: fn() -> any, update: fn(any, any) -> any, view: fn(any) -> stri
             let mut steps: int = 0
             let mut keep_going: bool = true
             while keep_going && steps < 8 is
-                let result: any = update(model, cur_msg)
+                let result: (any, fn() -> any) = update(model, cur_msg)
                 let (new_model, cmd) = result
                 model = new_model
                 let next_msg: any = cmd()
@@ -605,7 +618,7 @@ end
 ;; react to keypresses and don't want a background heartbeat at all (a
 ;; static menu, a confirmation prompt, ...). `cmd`s are still run the same
 ;; bounded (max 8) way as `run`.
-pub fn run_no_tick(init: fn() -> any, update: fn(any, any) -> any, view: fn(any) -> string) -> any is
+pub fn run_no_tick(init: fn() -> any, update: fn(any, any) -> (any, fn() -> any), view: fn(any) -> string) -> any is
     let saved: string = enable_raw_mode()
     enter_alt_screen()
     hide_cursor()
@@ -634,7 +647,7 @@ pub fn run_no_tick(init: fn() -> any, update: fn(any, any) -> any, view: fn(any)
             let mut steps: int = 0
             let mut keep_going: bool = true
             while keep_going && steps < 8 is
-                let result: any = update(model, cur_msg)
+                let result: (any, fn() -> any) = update(model, cur_msg)
                 let (new_model, cmd) = result
                 model = new_model
                 let next_msg: any = cmd()
@@ -758,7 +771,8 @@ pub fn style_new() -> any is
     }
 end
 
-pub fn style_fg(s: any, color: string) -> any is
+pub fn style_fg(s_any: any, color: string) -> any is
+    let s: Style = s_any
     return Style {
         fg: color, bg: s.bg, bold: s.bold, italic: s.italic, underline: s.underline,
         width: s.width, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -766,7 +780,8 @@ pub fn style_fg(s: any, color: string) -> any is
     }
 end
 
-pub fn style_bg(s: any, color: string) -> any is
+pub fn style_bg(s_any: any, color: string) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: color, bold: s.bold, italic: s.italic, underline: s.underline,
         width: s.width, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -774,7 +789,8 @@ pub fn style_bg(s: any, color: string) -> any is
     }
 end
 
-pub fn style_bold(s: any, on: bool) -> any is
+pub fn style_bold(s_any: any, on: bool) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: on, italic: s.italic, underline: s.underline,
         width: s.width, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -782,7 +798,8 @@ pub fn style_bold(s: any, on: bool) -> any is
     }
 end
 
-pub fn style_italic(s: any, on: bool) -> any is
+pub fn style_italic(s_any: any, on: bool) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: s.bold, italic: on, underline: s.underline,
         width: s.width, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -790,7 +807,8 @@ pub fn style_italic(s: any, on: bool) -> any is
     }
 end
 
-pub fn style_underline(s: any, on: bool) -> any is
+pub fn style_underline(s_any: any, on: bool) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic, underline: on,
         width: s.width, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -798,7 +816,8 @@ pub fn style_underline(s: any, on: bool) -> any is
     }
 end
 
-pub fn style_width(s: any, w: int) -> any is
+pub fn style_width(s_any: any, w: int) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic, underline: s.underline,
         width: w, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -806,7 +825,8 @@ pub fn style_width(s: any, w: int) -> any is
     }
 end
 
-pub fn style_align(s: any, align: string) -> any is
+pub fn style_align(s_any: any, align: string) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic, underline: s.underline,
         width: s.width, align: align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -814,7 +834,8 @@ pub fn style_align(s: any, align: string) -> any is
     }
 end
 
-pub fn style_padding(s: any, x: int, y: int) -> any is
+pub fn style_padding(s_any: any, x: int, y: int) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic, underline: s.underline,
         width: s.width, align: s.align, pad_x: x, pad_y: y,
@@ -822,7 +843,8 @@ pub fn style_padding(s: any, x: int, y: int) -> any is
     }
 end
 
-pub fn style_border(s: any, border: string) -> any is
+pub fn style_border(s_any: any, border: string) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic, underline: s.underline,
         width: s.width, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -830,7 +852,8 @@ pub fn style_border(s: any, border: string) -> any is
     }
 end
 
-pub fn style_border_color(s: any, color: string) -> any is
+pub fn style_border_color(s_any: any, color: string) -> any is
+    let s: Style = s_any
     return Style {
         fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic, underline: s.underline,
         width: s.width, align: s.align, pad_x: s.pad_x, pad_y: s.pad_y,
@@ -894,7 +917,8 @@ end
 ;; width + alignment, padding, and an optional border. This doesn't
 ;; reflow/word-wrap long lines — it pads short ones and leaves long ones
 ;; as-is, same trade-off `std/fmt.h#`'s table helpers make.
-pub fn style_render(s: any, text: string) -> string is
+pub fn style_render(s_any: any, text: string) -> string is
+    let s: Style = s_any
     let raw_lines: [string] = str_split(text, "\n")
     let content_width: int = if s.width > 0 is s.width else is max_line_width(raw_lines) end
     let prefix: string = sgr_prefix(s.bold, s.italic, s.underline, s.fg, s.bg)
@@ -1029,16 +1053,19 @@ pub fn spinner_new(kind: string) -> any is
 end
 
 ;; Advance to the next frame — call this once per tick you want it to spin.
-pub fn spinner_tick(sp: any) -> any is
+pub fn spinner_tick(sp_any: any) -> any is
+    let sp: Spinner = sp_any
     let n: int = sp.frames.len()
     return Spinner { frames: sp.frames, frame_idx: (sp.frame_idx + 1) % n, style: sp.style }
 end
 
-pub fn spinner_set_style(sp: any, style: any) -> any is
+pub fn spinner_set_style(sp_any: any, style: any) -> any is
+    let sp: Spinner = sp_any
     return Spinner { frames: sp.frames, frame_idx: sp.frame_idx, style: style }
 end
 
-pub fn spinner_view(sp: any) -> string is
+pub fn spinner_view(sp_any: any) -> string is
+    let sp: Spinner = sp_any
     return style_render(sp.style, sp.frames[sp.frame_idx])
 end
 
@@ -1060,25 +1087,29 @@ pub fn progress_new(width: int) -> any is
     }
 end
 
-pub fn progress_set(p: any, percent: int) -> any is
+pub fn progress_set(p_any: any, percent: int) -> any is
+    let p: Progress = p_any
     return Progress {
         percent: clampi(percent, 0, 100), width: p.width, filled_style: p.filled_style,
         filled_char: p.filled_char, empty_char: p.empty_char
     }
 end
 
-pub fn progress_set_style(p: any, style: any) -> any is
+pub fn progress_set_style(p_any: any, style: any) -> any is
+    let p: Progress = p_any
     return Progress {
         percent: p.percent, width: p.width, filled_style: style,
         filled_char: p.filled_char, empty_char: p.empty_char
     }
 end
 
-pub fn progress_percent(p: any) -> int is
+pub fn progress_percent(p_any: any) -> int is
+    let p: Progress = p_any
     return p.percent
 end
 
-pub fn progress_view(p: any) -> string is
+pub fn progress_view(p_any: any) -> string is
+    let p: Progress = p_any
     let filled_n: int = (p.width * p.percent) / 100
     let empty_n: int = p.width - filled_n
     let bar: string = style_render(p.filled_style, rep_str(p.filled_char, filled_n)) + rep_str(p.empty_char, empty_n)
@@ -1104,25 +1135,29 @@ pub fn textinput_new(placeholder: string) -> any is
     }
 end
 
-pub fn textinput_value(ti: any) -> string is
+pub fn textinput_value(ti_any: any) -> string is
+    let ti: TextInput = ti_any
     return ti.value
 end
 
-pub fn textinput_set_value(ti: any, value: string) -> any is
+pub fn textinput_set_value(ti_any: any, value: string) -> any is
+    let ti: TextInput = ti_any
     return TextInput {
         value: value, cursor: char_count(value), placeholder: ti.placeholder,
         focused: ti.focused, style: ti.style, cursor_style: ti.cursor_style
     }
 end
 
-pub fn textinput_focus(ti: any, on: bool) -> any is
+pub fn textinput_focus(ti_any: any, on: bool) -> any is
+    let ti: TextInput = ti_any
     return TextInput {
         value: ti.value, cursor: ti.cursor, placeholder: ti.placeholder,
         focused: on, style: ti.style, cursor_style: ti.cursor_style
     }
 end
 
-pub fn textinput_set_style(ti: any, style: any) -> any is
+pub fn textinput_set_style(ti_any: any, style: any) -> any is
+    let ti: TextInput = ti_any
     return TextInput {
         value: ti.value, cursor: ti.cursor, placeholder: ti.placeholder,
         focused: ti.focused, style: style, cursor_style: ti.cursor_style
@@ -1132,7 +1167,9 @@ end
 ;; Feed a `tui` message into the text field. No-ops when unfocused or when
 ;; `msg` isn't a key message, so it's always safe to call from `update`
 ;; without guarding it yourself.
-pub fn textinput_update(ti: any, msg: any) -> any is
+pub fn textinput_update(ti_any: any, msg_any: any) -> any is
+    let ti: TextInput = ti_any
+    let msg: Msg = msg_any
     if !ti.focused || msg.kind != "key" is return ti end
     let key: string = msg.key
     let v: string = ti.value
@@ -1163,14 +1200,16 @@ pub fn textinput_update(ti: any, msg: any) -> any is
     return ti
 end
 
-fn textinput_with(ti: any, value: string, cursor: int) -> any is
+fn textinput_with(ti_any: any, value: string, cursor: int) -> any is
+    let ti: TextInput = ti_any
     return TextInput {
         value: value, cursor: cursor, placeholder: ti.placeholder,
         focused: ti.focused, style: ti.style, cursor_style: ti.cursor_style
     }
 end
 
-pub fn textinput_view(ti: any) -> string is
+pub fn textinput_view(ti_any: any) -> string is
+    let ti: TextInput = ti_any
     if ti.value == "" is
         if !ti.focused is return style_render(ti.style, ti.placeholder) end
         return style_render(ti.cursor_style, " ") + style_render(ti.style, ti.placeholder)
@@ -1199,29 +1238,36 @@ pub fn viewport_new(width: int, height: int) -> any is
     return Viewport { lines: [], top: 0, width: width, height: height, style: style_new() }
 end
 
-pub fn viewport_set_content(vp: any, content: string) -> any is
+pub fn viewport_set_content(vp_any: any, content: string) -> any is
+    let vp: Viewport = vp_any
     return Viewport { lines: str_split(content, "\n"), top: 0, width: vp.width, height: vp.height, style: vp.style }
 end
 
-pub fn viewport_set_style(vp: any, style: any) -> any is
+pub fn viewport_set_style(vp_any: any, style: any) -> any is
+    let vp: Viewport = vp_any
     return Viewport { lines: vp.lines, top: vp.top, width: vp.width, height: vp.height, style: style }
 end
 
-pub fn viewport_scroll(vp: any, delta: int) -> any is
+pub fn viewport_scroll(vp_any: any, delta: int) -> any is
+    let vp: Viewport = vp_any
     let max_top: int = maxi(0, vp.lines.len() - vp.height)
     let new_top: int = clampi(vp.top + delta, 0, max_top)
     return Viewport { lines: vp.lines, top: new_top, width: vp.width, height: vp.height, style: vp.style }
 end
 
-pub fn viewport_at_top(vp: any) -> bool is
+pub fn viewport_at_top(vp_any: any) -> bool is
+    let vp: Viewport = vp_any
     return vp.top <= 0
 end
 
-pub fn viewport_at_bottom(vp: any) -> bool is
+pub fn viewport_at_bottom(vp_any: any) -> bool is
+    let vp: Viewport = vp_any
     return vp.top >= maxi(0, vp.lines.len() - vp.height)
 end
 
-pub fn viewport_update(vp: any, msg: any) -> any is
+pub fn viewport_update(vp_any: any, msg_any: any) -> any is
+    let vp: Viewport = vp_any
+    let msg: Msg = msg_any
     if msg.kind != "key" is return vp end
     if msg.key == "up" is return viewport_scroll(vp, -1) end
     if msg.key == "down" is return viewport_scroll(vp, 1) end
@@ -1232,7 +1278,8 @@ pub fn viewport_update(vp: any, msg: any) -> any is
     return vp
 end
 
-pub fn viewport_view(vp: any) -> string is
+pub fn viewport_view(vp_any: any) -> string is
+    let vp: Viewport = vp_any
     let mut out: [string] = []
     let mut i: int = 0
     while i < vp.height is
@@ -1263,19 +1310,23 @@ pub fn list_new(items: [string]) -> any is
     }
 end
 
-pub fn list_set_height(l: any, height: int) -> any is
+pub fn list_set_height(l_any: any, height: int) -> any is
+    let l: ListModel = l_any
     return ListModel { items: l.items, cursor: l.cursor, top: l.top, height: height, style: l.style, selected_style: l.selected_style }
 end
 
-pub fn list_set_items(l: any, items: [string]) -> any is
+pub fn list_set_items(l_any: any, items: [string]) -> any is
+    let l: ListModel = l_any
     return ListModel { items: items, cursor: 0, top: 0, height: l.height, style: l.style, selected_style: l.selected_style }
 end
 
-pub fn list_set_style(l: any, style: any, selected_style: any) -> any is
+pub fn list_set_style(l_any: any, style: any, selected_style: any) -> any is
+    let l: ListModel = l_any
     return ListModel { items: l.items, cursor: l.cursor, top: l.top, height: l.height, style: style, selected_style: selected_style }
 end
 
-fn list_reclamp(l: any, cursor: int) -> any is
+fn list_reclamp(l_any: any, cursor: int) -> any is
+    let l: ListModel = l_any
     let n: int = l.items.len()
     let c: int = clampi(cursor, 0, maxi(0, n - 1))
     let mut top: int = l.top
@@ -1285,7 +1336,9 @@ fn list_reclamp(l: any, cursor: int) -> any is
     return ListModel { items: l.items, cursor: c, top: top, height: l.height, style: l.style, selected_style: l.selected_style }
 end
 
-pub fn list_update(l: any, msg: any) -> any is
+pub fn list_update(l_any: any, msg_any: any) -> any is
+    let l: ListModel = l_any
+    let msg: Msg = msg_any
     if msg.kind != "key" is return l end
     if msg.key == "up" is return list_reclamp(l, l.cursor - 1) end
     if msg.key == "down" is return list_reclamp(l, l.cursor + 1) end
@@ -1296,16 +1349,19 @@ pub fn list_update(l: any, msg: any) -> any is
     return l
 end
 
-pub fn list_selected_index(l: any) -> int is
+pub fn list_selected_index(l_any: any) -> int is
+    let l: ListModel = l_any
     return l.cursor
 end
 
-pub fn list_selected(l: any) -> string is
+pub fn list_selected(l_any: any) -> string is
+    let l: ListModel = l_any
     if l.items.len() == 0 is return "" end
     return l.items[l.cursor]
 end
 
-pub fn list_view(l: any) -> string is
+pub fn list_view(l_any: any) -> string is
+    let l: ListModel = l_any
     let mut out: [string] = []
     let n: int = l.items.len()
     let mut i: int = l.top
@@ -1340,33 +1396,39 @@ pub fn paginator_new(total_pages: int) -> any is
     }
 end
 
-pub fn paginator_page(p: any) -> int is
+pub fn paginator_page(p_any: any) -> int is
+    let p: Paginator = p_any
     return p.page
 end
 
-pub fn paginator_set_page(p: any, page: int) -> any is
+pub fn paginator_set_page(p_any: any, page: int) -> any is
+    let p: Paginator = p_any
     return Paginator {
         page: clampi(page, 0, p.total_pages - 1), total_pages: p.total_pages,
         active_style: p.active_style, inactive_style: p.inactive_style
     }
 end
 
-pub fn paginator_next(p: any) -> any is
+pub fn paginator_next(p_any: any) -> any is
+    let p: Paginator = p_any
     return paginator_set_page(p, p.page + 1)
 end
 
-pub fn paginator_prev(p: any) -> any is
+pub fn paginator_prev(p_any: any) -> any is
+    let p: Paginator = p_any
     return paginator_set_page(p, p.page - 1)
 end
 
-pub fn paginator_update(p: any, msg: any) -> any is
+pub fn paginator_update(p: any, msg_any: any) -> any is
+    let msg: Msg = msg_any
     if msg.kind != "key" is return p end
     if msg.key == "left" is return paginator_prev(p) end
     if msg.key == "right" is return paginator_next(p) end
     return p
 end
 
-pub fn paginator_view(p: any) -> string is
+pub fn paginator_view(p_any: any) -> string is
+    let p: Paginator = p_any
     let mut out: string = ""
     let mut i: int = 0
     while i < p.total_pages is
@@ -1412,12 +1474,14 @@ pub fn timer_new() -> any is
     return Timer { started_at_ms: __builtin_time_now_ms(), stopped_elapsed_ms: 0, running: true }
 end
 
-pub fn timer_start(t: any) -> any is
+pub fn timer_start(t_any: any) -> any is
+    let t: Timer = t_any
     if t.running is return t end
     return Timer { started_at_ms: __builtin_time_now_ms() - t.stopped_elapsed_ms, stopped_elapsed_ms: 0, running: true }
 end
 
-pub fn timer_stop(t: any) -> any is
+pub fn timer_stop(t_any: any) -> any is
+    let t: Timer = t_any
     if !t.running is return t end
     return Timer { started_at_ms: t.started_at_ms, stopped_elapsed_ms: __builtin_time_now_ms() - t.started_at_ms, running: false }
 end
@@ -1426,7 +1490,8 @@ pub fn timer_reset(t: any) -> any is
     return Timer { started_at_ms: __builtin_time_now_ms(), stopped_elapsed_ms: 0, running: true }
 end
 
-pub fn timer_elapsed_ms(t: any) -> int is
+pub fn timer_elapsed_ms(t_any: any) -> int is
+    let t: Timer = t_any
     if t.running is return __builtin_time_now_ms() - t.started_at_ms end
     return t.stopped_elapsed_ms
 end
