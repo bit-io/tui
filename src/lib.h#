@@ -584,12 +584,40 @@ pub fn run(init: fn() -> any, update: fn(any, any) -> (any, fn() -> any), view: 
     let mut model: any = init()
     let mut running: bool = true
 
-    while running is
-        draw(view(model))
+    ;; Loop hygiene (see PATCHES.md §5). The stock loop redrew the whole screen
+    ;; and spawned two `sh -c stty` processes on *every* tick. If the runtime's
+    ;; read returns immediately (no 100 ms VTIME wait), that is a busy loop of
+    ;; forks + full-screen redraws, which starves the machine within seconds and
+    ;; makes the keyboard appear dead. So: (1) draw only when the frame changed,
+    ;; (2) look up the terminal size at most once a second, (3) never spin faster
+    ;; than ~12 idle ticks per second, whatever the runtime's read() does.
+    let mut last_frame: string = ""
+    let (w0, h0) = term_size()
+    let mut cur_w: int = w0
+    let mut cur_h: int = h0
+    let mut size_at: int = __builtin_time_now_ms()
 
+    while running is
+        let frame: string = view(model)
+        if frame != last_frame is
+            draw(frame)
+            last_frame = frame
+        end
+
+        let t0: int = __builtin_time_now_ms()
         let key: string = poll_key()
         let msg: any = if key == "" is
-            tick_msg(term_width(), term_height())
+            let now: int = __builtin_time_now_ms()
+            let spent: int = now - t0
+            if spent < 80 is __builtin_time_sleep_ms(80 - spent) end
+            if now - size_at >= 1000 is
+                let (sw, sh) = term_size()
+                if sw != cur_w || sh != cur_h is last_frame = "" end   ;; resized → full redraw
+                cur_w = sw
+                cur_h = sh
+                size_at = now
+            end
+            tick_msg(cur_w, cur_h)
         else is
             if key == "ctrl+c" is
                 internal_quit_msg()
@@ -644,11 +672,17 @@ pub fn run_no_tick(init: fn() -> any, update: fn(any, any) -> (any, fn() -> any)
     let mut model: any = init()
     let mut running: bool = true
 
+    let mut last_frame: string = ""
     while running is
-        draw(view(model))
+        let frame: string = view(model)
+        if frame != last_frame is
+            draw(frame)
+            last_frame = frame
+        end
 
         let mut key: string = poll_key()
         while key == "" is
+            __builtin_time_sleep_ms(15)   ;; never busy-spin if read() returns at once
             key = poll_key()
         end
 
