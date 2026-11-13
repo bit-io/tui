@@ -1,0 +1,45 @@
+fn help_parts(keys: [string], descriptions: [string]) -> [string] is
+    let key_style: any = tl_style::style_bold(tl_style::style_fg(tl_style::style_new(), "cyan"), true)
+    let desc_style: any = tl_style::style_fg(tl_style::style_new(), "bright_black")
+    let mut parts: [string] = []
+    let n: int = tl_text::mini(keys.len(), descriptions.len())
+    let mut i: int = 0
+    while i < n is
+        parts.push(tl_style::style_render(key_style, keys[i]) + " " + tl_style::style_render(desc_style, descriptions[i]))
+        i = i + 1
+    end
+    return parts
+end
+
+pub fn help_view(keys: [string], descriptions: [string]) -> string is
+    let sep_style: any = tl_style::style_fg(tl_style::style_new(), "bright_black")
+    return iter_join(help_parts(keys, descriptions), tl_style::style_render(sep_style, "  •  "))
+end
+
+;; Like `help_view`, but starts a new line whenever the next binding would push the
+;; line past `width` columns.
+pub fn help_view_width(keys: [string], descriptions: [string], width: int) -> string is
+    let sep_style: any = tl_style::style_fg(tl_style::style_new(), "bright_black")
+    let sep: string = tl_style::style_render(sep_style, "  •  ")
+    let sep_w: int = tl_text::visible_len(sep)
+    let parts: [string] = help_parts(keys, descriptions)
+    let mut lines: [string] = []
+    let mut cur: string = ""
+    let mut cur_w: int = 0
+    for p in parts is
+        let pw: int = tl_text::visible_len(p)
+        if cur == "" is
+            cur = p
+            cur_w = pw
+        elsif width > 0 && cur_w + sep_w + pw > width is
+            lines.push(cur)
+            cur = p
+            cur_w = pw
+        else is
+            cur = cur + sep + p
+            cur_w = cur_w + sep_w + pw
+        end
+    end
+    if cur != "" is lines.push(cur) end
+    return iter_join(lines, "\n")
+end
