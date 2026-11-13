@@ -1,0 +1,43 @@
+pub fn sparkline(values: [int], color: string) -> string is
+    let n: int = values.len()
+    if n == 0 is return "" end
+    let levels: [string] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+    let mut lo: int = values[0]
+    let mut hi: int = values[0]
+    for v in values is
+        if v < lo is lo = v end
+        if v > hi is hi = v end
+    end
+    let span: int = hi - lo
+    let mut out: string = ""
+    for v in values is
+        let idx: int = if span <= 0 is 3 else is ((v - lo) * 7) / span end
+        out = out + levels[tl_text::clampi(idx, 0, 7)]
+    end
+    return tl_color::colorize(out, color)
+end
+
+;; A horizontal bar chart: one row per label — `label  ████▌░░░ value`. Bars are
+;; scaled so the largest value fills `bar_width` cells (values below 0 count as 0).
+pub fn bar_chart(labels: [string], values: [int], bar_width: int, color: string) -> string is
+    let n: int = tl_text::mini(labels.len(), values.len())
+    if n == 0 is return "" end
+    let mut hi: int = 0
+    let mut label_w: int = 0
+    let mut i: int = 0
+    while i < n is
+        if values[i] > hi is hi = values[i] end
+        if tl_text::visible_len(labels[i]) > label_w is label_w = tl_text::visible_len(labels[i]) end
+        i = i + 1
+    end
+    let mut rows: [string] = []
+    i = 0
+    while i < n is
+        let v: int = tl_text::maxi(0, values[i])
+        let filled: int = if hi <= 0 is 0 else is (v * bar_width) / hi end
+        let bar: string = tl_color::colorize(tl_text::rep_str("█", filled), color) + tl_text::rep_str("░", bar_width - filled)
+        rows.push(tl_text::pad_right(labels[i], label_w) + " " + bar + " " + to_string(values[i]))
+        i = i + 1
+    end
+    return iter_join(rows, "\n")
+end
