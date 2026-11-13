@@ -1,0 +1,154 @@
+pub fn block_width(s: string) -> int is
+    return tl_style::max_line_width(str_split(s, "\n"))
+end
+
+;; Height of a block: its number of lines.
+pub fn block_height(s: string) -> int is
+    let lines: [string] = str_split(s, "\n")
+    return lines.len()
+end
+
+;; Lay several (possibly multi-line) blocks side by side, `gap` spaces
+;; apart, bottom-padding the shorter ones so ragged heights still line up.
+pub fn join_horizontal(blocks: [string], gap: int) -> string is
+    return join_horizontal_align(blocks, gap, "top")
+end
+
+;; Like `join_horizontal`, but `valign` ("top" | "middle" | "bottom") decides where
+;; the shorter blocks sit vertically.
+pub fn join_horizontal_align(blocks: [string], gap: int, valign: string) -> string is
+    let mut cols: [[string]] = []
+    let mut widths: [int] = []
+    let mut max_h: int = 0
+    for b in blocks is
+        let ls: [string] = str_split(b, "\n")
+        cols.push(ls)
+        widths.push(tl_style::max_line_width(ls))
+        if ls.len() > max_h is max_h = ls.len() end
+    end
+    let mut out_lines: [string] = []
+    let mut row: int = 0
+    while row < max_h is
+        let mut line: string = ""
+        let mut bi: int = 0
+        while bi < cols.len() is
+            let ls: [string] = cols[bi]
+            let w: int = widths[bi]
+            let extra: int = max_h - ls.len()
+            let mut off: int = 0
+            if valign == "middle" is off = extra / 2 end
+            if valign == "bottom" is off = extra end
+            let src_row: int = row - off
+            let cell: string = if src_row >= 0 && src_row < ls.len() is tl_text::pad_right(ls[src_row], w) else is tl_text::rep_str(" ", w) end
+            line = line + cell
+            if bi < cols.len() - 1 is
+                line = line + tl_text::rep_str(" ", gap)
+            end
+            bi = bi + 1
+        end
+        out_lines.push(line)
+        row = row + 1
+    end
+    return iter_join(out_lines, "\n")
+end
+
+;; Stack blocks top to bottom.
+pub fn join_vertical(blocks: [string]) -> string is
+    return iter_join(blocks, "\n")
+end
+
+;; Stack blocks top to bottom, aligning every line to the widest block:
+;; `align` is "left" | "center" | "right".
+pub fn join_vertical_align(blocks: [string], align: string) -> string is
+    let mut lines: [string] = []
+    for b in blocks is
+        let parts: [string] = str_split(b, "\n")
+        for l in parts is lines.push(l) end
+    end
+    let w: int = tl_style::max_line_width(lines)
+    let mut out: [string] = []
+    for l in lines is out.push(tl_style::align_line(l, w, align)) end
+    return iter_join(out, "\n")
+end
+
+;; Put a block into a `width` x `height` box of spaces. `halign`: "left" | "center" |
+;; "right"; `valign`: "top" | "middle" | "bottom".
+pub fn place(s: string, width: int, height: int, halign: string, valign: string) -> string is
+    let lines: [string] = str_split(s, "\n")
+    let content_h: int = lines.len()
+    let free: int = tl_text::maxi(0, height - content_h)
+    let mut top_pad: int = 0
+    if valign == "middle" is top_pad = free / 2 end
+    if valign == "bottom" is top_pad = free end
+    let bottom_pad: int = free - top_pad
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < top_pad is
+        out.push(tl_text::rep_str(" ", width))
+        i = i + 1
+    end
+    for l in lines is
+        out.push(tl_style::align_line(l, width, halign))
+    end
+    i = 0
+    while i < bottom_pad is
+        out.push(tl_text::rep_str(" ", width))
+        i = i + 1
+    end
+    return iter_join(out, "\n")
+end
+
+;; Center a (possibly multi-line) block inside a `width` x `height` box of
+;; spaces.
+pub fn center_block(s: string, width: int, height: int) -> string is
+    return place(s, width, height, "center", "middle")
+end
+
+;; Indent every line of `s` by `n` spaces.
+pub fn indent(s: string, n: int) -> string is
+    let pad: string = tl_text::rep_str(" ", n)
+    let mut out: [string] = []
+    let src: [string] = str_split(s, "\n")
+    for l in src is out.push(pad + l) end
+    return iter_join(out, "\n")
+end
+
+;; A horizontal rule `width` columns wide.
+pub fn hline(width: int) -> string is
+    return tl_text::rep_str("─", width)
+end
+
+;; A box with the title set into its top edge:
+;;   ╭─ Title ───────╮
+;;   │ body          │
+;;   ╰───────────────╯
+;; `border` is a border name ("rounded" "normal" "thick" "double" "ascii"),
+;; `color` the border/title color ("" for none). Body lines get 1 column of padding.
+pub fn box_titled(title: string, body: string, border: string, color: string) -> string is
+    let (h, v, tl, tr, bl, br) = tl_style::border_chars(border)
+    let lines: [string] = str_split(body, "\n")
+    let label: string = if title == "" is "" else is " " + title + " " end
+    let label_w: int = tl_text::visible_len(label)
+    let inner: int = tl_text::maxi(tl_style::max_line_width(lines) + 2, label_w + 2)
+    let pre: string = if color == "" is "" else is "\x1b[" + tl_color::fg_code(color) + "m" end
+    let post: string = if pre == "" is "" else is "\x1b[0m" end
+    let top: string = pre + tl + h + post + label + pre + tl_text::rep_str(h, inner - 1 - label_w) + tr + post
+    let bottom: string = pre + bl + tl_text::rep_str(h, inner) + br + post
+    let mut out: [string] = []
+    out.push(top)
+    for l in lines is
+        out.push(pre + v + post + " " + tl_text::pad_right(l, inner - 2) + " " + pre + v + post)
+    end
+    out.push(bottom)
+    return iter_join(out, "\n")
+end
+
+;; One status line: `left` flush left, `right` flush right, `width` columns total
+;; (the left part is cut with an ellipsis if the two do not fit).
+pub fn statusbar(left: string, right: string, width: int) -> string is
+    let rw: int = tl_text::visible_len(right)
+    let avail: int = tl_text::maxi(0, width - rw - 1)
+    let l: string = tl_text::truncate_str(left, avail, "…")
+    let gap: int = tl_text::maxi(1, width - tl_text::visible_len(l) - rw)
+    return l + tl_text::rep_str(" ", gap) + right
+end
