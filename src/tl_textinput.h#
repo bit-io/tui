@@ -1,0 +1,195 @@
+struct TextInput is
+    pub value: string
+    pub cursor: int
+    pub placeholder: string
+    pub focused: bool
+    pub style: any
+    pub cursor_style: any
+    pub prompt: string       ;; shown before the text, e.g. "> "
+    pub echo: string         ;; "" = show the text; otherwise this char replaces every char (password)
+    pub limit: int           ;; 0 = unlimited, else max number of characters
+    pub width: int           ;; 0 = unlimited, else visible window (scrolls horizontally)
+end
+
+fn ti_make(value: string, cursor: int, placeholder: string, focused: bool, style: any, cursor_style: any, prompt: string, echo: string, limit: int, width: int) -> any is
+    return TextInput {
+        value: value, cursor: cursor, placeholder: placeholder, focused: focused,
+        style: style, cursor_style: cursor_style, prompt: prompt, echo: echo, limit: limit, width: width
+    }
+end
+
+pub fn textinput_new(placeholder: string) -> any is
+    return ti_make("", 0, placeholder, true, tl_style::style_new(), tl_style::style_fg(tl_style::style_bg(tl_style::style_new(), "white"), "black"), "", "", 0, 0)
+end
+
+pub fn textinput_value(ti_any: any) -> string is
+    let ti: TextInput = ti_any
+    return ti.value
+end
+
+pub fn textinput_cursor(ti_any: any) -> int is
+    let ti: TextInput = ti_any
+    return ti.cursor
+end
+
+pub fn textinput_set_value(ti_any: any, value: string) -> any is
+    let ti: TextInput = ti_any
+    let mut v: string = value
+    if ti.limit > 0 && tl_text::char_count(v) > ti.limit is v = v[0..ti.limit] end
+    return ti_make(v, tl_text::char_count(v), ti.placeholder, ti.focused, ti.style, ti.cursor_style, ti.prompt, ti.echo, ti.limit, ti.width)
+end
+
+;; Clear the field.
+pub fn textinput_reset(ti_any: any) -> any is
+    return textinput_set_value(ti_any, "")
+end
+
+pub fn textinput_focus(ti_any: any, on: bool) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(ti.value, ti.cursor, ti.placeholder, on, ti.style, ti.cursor_style, ti.prompt, ti.echo, ti.limit, ti.width)
+end
+
+pub fn textinput_set_style(ti_any: any, style: any) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(ti.value, ti.cursor, ti.placeholder, ti.focused, style, ti.cursor_style, ti.prompt, ti.echo, ti.limit, ti.width)
+end
+
+;; Style of the block cursor (default: black on white).
+pub fn textinput_set_cursor_style(ti_any: any, cursor_style: any) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(ti.value, ti.cursor, ti.placeholder, ti.focused, ti.style, cursor_style, ti.prompt, ti.echo, ti.limit, ti.width)
+end
+
+;; Text shown before the field, e.g. "> " or "Name: ".
+pub fn textinput_set_prompt(ti_any: any, prompt: string) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(ti.value, ti.cursor, ti.placeholder, ti.focused, ti.style, ti.cursor_style, prompt, ti.echo, ti.limit, ti.width)
+end
+
+;; Password mode: show `echo` (one character, e.g. "*") instead of every typed
+;; character; "" turns it off again. `textinput_value` still returns the real text.
+pub fn textinput_set_echo(ti_any: any, echo: string) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(ti.value, ti.cursor, ti.placeholder, ti.focused, ti.style, ti.cursor_style, ti.prompt, echo, ti.limit, ti.width)
+end
+
+;; Maximum number of characters (0 = unlimited).
+pub fn textinput_set_limit(ti_any: any, limit: int) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(ti.value, ti.cursor, ti.placeholder, ti.focused, ti.style, ti.cursor_style, ti.prompt, ti.echo, tl_text::maxi(0, limit), ti.width)
+end
+
+;; Visible width in characters (0 = as wide as the text); longer text scrolls
+;; horizontally so the cursor stays in view.
+pub fn textinput_set_width(ti_any: any, width: int) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(ti.value, ti.cursor, ti.placeholder, ti.focused, ti.style, ti.cursor_style, ti.prompt, ti.echo, ti.limit, tl_text::maxi(0, width))
+end
+
+fn ti_with(ti_any: any, value: string, cursor: int) -> any is
+    let ti: TextInput = ti_any
+    return ti_make(value, cursor, ti.placeholder, ti.focused, ti.style, ti.cursor_style, ti.prompt, ti.echo, ti.limit, ti.width)
+end
+
+;; Index of the start of the word before `c` (skips spaces, then the word).
+fn word_start_before(v: string, c: int) -> int is
+    let mut i: int = c
+    while i > 0 && tl_text::is_ws_ch(v[i - 1..i]) is
+        i = i - 1
+    end
+    while i > 0 && !tl_text::is_ws_ch(v[i - 1..i]) is
+        i = i - 1
+    end
+    return i
+end
+
+;; Index just past the end of the word after `c` (skips spaces, then the word).
+fn word_end_after(v: string, c: int) -> int is
+    let n: int = tl_text::char_count(v)
+    let mut i: int = c
+    while i < n && tl_text::is_ws_ch(v[i..i + 1]) is
+        i = i + 1
+    end
+    while i < n && !tl_text::is_ws_ch(v[i..i + 1]) is
+        i = i + 1
+    end
+    return i
+end
+
+;; Feed a `tui` message into the text field. No-ops when unfocused or when
+;; `msg` isn't a key message, so it's always safe to call from `update`
+;; without guarding it yourself.
+;;
+;; Keys: printable text, space, backspace, delete / ctrl+d, left/right, home / ctrl+a,
+;; end / ctrl+e, ctrl+u (delete to start), ctrl+k (delete to end), ctrl+w /
+;; alt+backspace (delete word), ctrl+left / alt+b and ctrl+right / alt+f (word jumps).
+pub fn textinput_update(ti_any: any, msg_any: any) -> any is
+    let ti: TextInput = ti_any
+    if !ti.focused || !tl_msg::msg_is_any_key(msg_any) is return ti end
+    let key: string = tl_msg::msg_key(msg_any)
+    let v: string = ti.value
+    let c: int = ti.cursor
+    let n: int = tl_text::char_count(v)
+
+    if key == "backspace" is
+        if c > 0 is return ti_with(ti, v[0..c - 1] + v[c..n], c - 1) end
+        return ti
+    end
+    if key == "delete" || key == "ctrl+d" is
+        if c < n is return ti_with(ti, v[0..c] + v[c + 1..n], c) end
+        return ti
+    end
+    if key == "left" is return ti_with(ti, v, tl_text::maxi(0, c - 1)) end
+    if key == "right" is return ti_with(ti, v, tl_text::mini(n, c + 1)) end
+    if key == "home" || key == "ctrl+a" is return ti_with(ti, v, 0) end
+    if key == "end" || key == "ctrl+e" is return ti_with(ti, v, n) end
+    if key == "ctrl+u" is return ti_with(ti, v[c..n], 0) end
+    if key == "ctrl+k" is return ti_with(ti, v[0..c], c) end
+    if key == "ctrl+w" || key == "alt+backspace" is
+        let s: int = word_start_before(v, c)
+        return ti_with(ti, v[0..s] + v[c..n], s)
+    end
+    if key == "ctrl+left" || key == "alt+b" is return ti_with(ti, v, word_start_before(v, c)) end
+    if key == "ctrl+right" || key == "alt+f" is return ti_with(ti, v, word_end_after(v, c)) end
+
+    let mut typed: string = ""
+    if key == "space" is
+        typed = " "
+    elsif !tl_keys::is_special_key(key) is
+        typed = key
+    end
+    if typed != "" is
+        if ti.limit > 0 && n + tl_text::char_count(typed) > ti.limit is return ti end
+        return ti_with(ti, v[0..c] + typed + v[c..n], c + tl_text::char_count(typed))
+    end
+    return ti
+end
+
+pub fn textinput_view(ti_any: any) -> string is
+    let ti: TextInput = ti_any
+    let shown: string = if ti.echo == "" is ti.value else is tl_text::rep_str(ti.echo, tl_text::utf8_count(ti.value)) end
+    let total: int = tl_text::utf8_count(shown)
+    if total == 0 is
+        if !ti.focused is return ti.prompt + tl_style::style_render(ti.style, ti.placeholder) end
+        return ti.prompt + tl_style::style_render(ti.cursor_style, " ") + tl_style::style_render(ti.style, ti.placeholder)
+    end
+    if !ti.focused is
+        let mut flat: string = shown
+        if ti.width > 0 && total > ti.width is flat = tl_text::utf8_take(shown, ti.width) end
+        return ti.prompt + tl_style::style_render(ti.style, flat)
+    end
+
+    let cur: int = tl_text::clampi(ti.cursor, 0, total)
+    let mut start: int = 0
+    let mut window: string = shown
+    if ti.width > 0 is
+        if cur >= ti.width is start = cur - ti.width + 1 end
+        window = tl_text::utf8_take(tl_text::utf8_skip(shown, start), ti.width)
+    end
+    let rel: int = cur - start
+    let before: string = tl_text::utf8_take(window, rel)
+    let rest: string = tl_text::utf8_skip(window, rel)
+    let at_cursor: string = if rest == "" is " " else is tl_text::utf8_take(rest, 1) end
+    let after: string = tl_text::utf8_skip(rest, 1)
+    return ti.prompt + tl_style::style_render(ti.style, before) + tl_style::style_render(ti.cursor_style, at_cursor) + tl_style::style_render(ti.style, after)
+end
