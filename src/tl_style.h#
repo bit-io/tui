@@ -1,0 +1,411 @@
+struct Style is
+    pub fg: string
+    pub bg: string
+    pub bold: bool
+    pub italic: bool
+    pub underline: bool
+    pub faint: bool
+    pub strike: bool
+    pub reverse: bool
+    pub width: int          ;; 0 = auto (fit content)
+    pub height: int          ;; 0 = auto; otherwise content is padded/cut to this many lines
+    pub max_width: int          ;; 0 = unlimited; longer lines are cut with a trailing ellipsis
+    pub align: string          ;; "left" | "center" | "right"
+    pub valign: string          ;; "top" | "middle" | "bottom" (only matters with a fixed height)
+    pub pad_x: int
+    pub pad_y: int
+    pub margin_x: int
+    pub margin_y: int
+    pub border: string          ;; "none" | "normal" | "rounded" | "thick" | "double" | "ascii" | "hidden"
+    pub border_color: string
+    pub wrap: bool          ;; word-wrap to `width` (needs width > 0)
+end
+
+pub fn style_new() -> any is
+    return Style {
+        fg: "", bg: "", bold: false,
+        italic: false, underline: false, faint: false,
+        strike: false, reverse: false, width: 0,
+        height: 0, max_width: 0, align: "left",
+        valign: "top", pad_x: 0, pad_y: 0,
+        margin_x: 0, margin_y: 0, border: "none",
+        border_color: "", wrap: false
+    }
+end
+
+pub fn style_fg(s_any: any, color: string) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: color, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_bg(s_any: any, color: string) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: color, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_bold(s_any: any, on: bool) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: on, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_italic(s_any: any, on: bool) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: on,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_underline(s_any: any, on: bool) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: on, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; dim / low-intensity text
+pub fn style_faint(s_any: any, on: bool) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: on, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; crossed-out text
+pub fn style_strikethrough(s_any: any, on: bool) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: on, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; swap foreground and background
+pub fn style_reverse(s_any: any, on: bool) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: on,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_width(s_any: any, w: int) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: w, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; fixed content height in lines (0 = auto)
+pub fn style_height(s_any: any, h: int) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: h, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; cut every line to at most `w` columns (with a trailing ellipsis)
+pub fn style_max_width(s_any: any, w: int) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: w, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_align(s_any: any, align: string) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; "top" | "middle" | "bottom" - where content sits inside a fixed `height`
+pub fn style_valign(s_any: any, valign: string) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_padding(s_any: any, x: int, y: int) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: x, pad_y: y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; blank space outside the border: `x` columns each side, `y` rows top and bottom
+pub fn style_margin(s_any: any, x: int, y: int) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: x,
+        margin_y: y, border: s.border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+;; "none" | "normal" | "rounded" | "thick" | "double" | "ascii" | "hidden"
+pub fn style_border(s_any: any, border: string) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: border, border_color: s.border_color, wrap: s.wrap
+    }
+end
+
+pub fn style_border_color(s_any: any, color: string) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: color, wrap: s.wrap
+    }
+end
+
+;; word-wrap the text to `width` (needs `style_width` > 0)
+pub fn style_wrap(s_any: any, on: bool) -> any is
+    let s: Style = s_any
+    return Style {
+        fg: s.fg, bg: s.bg, bold: s.bold, italic: s.italic,
+        underline: s.underline, faint: s.faint, strike: s.strike, reverse: s.reverse,
+        width: s.width, height: s.height, max_width: s.max_width, align: s.align,
+        valign: s.valign, pad_x: s.pad_x, pad_y: s.pad_y, margin_x: s.margin_x,
+        margin_y: s.margin_y, border: s.border, border_color: s.border_color, wrap: on
+    }
+end
+
+;; fluent chaining sugar around the functions above - e.g.
+;; `tui::style_new().with_fg("#7dd3fc").with_bold(true).render("hi")`
+impl Style is
+    fn with_fg(self, color: string) -> Style is return style_fg(self, color) end
+    fn with_bg(self, color: string) -> Style is return style_bg(self, color) end
+    fn with_bold(self, on: bool) -> Style is return style_bold(self, on) end
+    fn with_italic(self, on: bool) -> Style is return style_italic(self, on) end
+    fn with_underline(self, on: bool) -> Style is return style_underline(self, on) end
+    fn with_faint(self, on: bool) -> Style is return style_faint(self, on) end
+    fn with_strikethrough(self, on: bool) -> Style is return style_strikethrough(self, on) end
+    fn with_reverse(self, on: bool) -> Style is return style_reverse(self, on) end
+    fn with_width(self, w: int) -> Style is return style_width(self, w) end
+    fn with_height(self, h: int) -> Style is return style_height(self, h) end
+    fn with_max_width(self, w: int) -> Style is return style_max_width(self, w) end
+    fn with_align(self, align: string) -> Style is return style_align(self, align) end
+    fn with_valign(self, valign: string) -> Style is return style_valign(self, valign) end
+    fn with_padding(self, x: int, y: int) -> Style is return style_padding(self, x, y) end
+    fn with_margin(self, x: int, y: int) -> Style is return style_margin(self, x, y) end
+    fn with_border(self, border: string) -> Style is return style_border(self, border) end
+    fn with_border_color(self, color: string) -> Style is return style_border_color(self, color) end
+    fn with_wrap(self, on: bool) -> Style is return style_wrap(self, on) end
+    fn render(self, text: string) -> string is return style_render(self, text) end
+end
+
+;;@internal
+pub fn sgr_prefix(bold: bool, italic: bool, underline: bool, faint: bool, strike: bool, reverse: bool, fg: string, bg: string) -> string is
+    let mut parts: [string] = []
+    if bold is parts.push("1") end
+    if faint is parts.push("2") end
+    if italic is parts.push("3") end
+    if underline is parts.push("4") end
+    if reverse is parts.push("7") end
+    if strike is parts.push("9") end
+    let f: string = tl_color::fg_code(fg)
+    if f != "" is parts.push(f) end
+    let b: string = tl_color::bg_code(bg)
+    if b != "" is parts.push(b) end
+    if parts.len() == 0 is return "" end
+    return "\x1b[" + iter_join(parts, ";") + "m"
+end
+
+;;@internal
+pub fn align_line(line: string, width: int, align: string) -> string is
+    if align == "center" is return tl_text::pad_center(line, width) end
+    if align == "right" is return tl_text::pad_left(line, width) end
+    return tl_text::pad_right(line, width)
+end
+
+;;@internal
+pub fn max_line_width(lines: [string]) -> int is
+    let mut m: int = 0
+    for l in lines is
+        let w: int = tl_text::visible_len(l)
+        if w > m is m = w end
+    end
+    return m
+end
+
+;; (horizontal, vertical, top-left, top-right, bottom-left, bottom-right)
+;;@internal
+pub fn border_chars(kind: string) -> (string, string, string, string, string, string) is
+    if kind == "rounded" is return ("─", "│", "╭", "╮", "╰", "╯") end
+    if kind == "thick" is return ("━", "┃", "┏", "┓", "┗", "┛") end
+    if kind == "double" is return ("═", "║", "╔", "╗", "╚", "╝") end
+    if kind == "ascii" is return ("-", "|", "+", "+", "+", "+") end
+    if kind == "hidden" is return (" ", " ", " ", " ", " ", " ") end
+    return ("─", "│", "┌", "┐", "└", "┘")
+end
+
+;; Fit `lines` into exactly `height` rows, placing content per `valign`.
+fn fit_height(lines: [string], height: int, valign: string) -> [string] is
+    let n: int = lines.len()
+    if n >= height is
+        let mut cut: [string] = []
+        let mut i: int = 0
+        while i < height is
+            cut.push(lines[i])
+            i = i + 1
+        end
+        return cut
+    end
+    let extra: int = height - n
+    let mut top: int = 0
+    if valign == "middle" is top = extra / 2 end
+    if valign == "bottom" is top = extra end
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < top is
+        out.push("")
+        i = i + 1
+    end
+    for l in lines is out.push(l) end
+    while out.len() < height is out.push("") end
+    return out
+end
+
+;; Render `text` (may be multi-line) through a style: color/attrs, optional
+;; word-wrap, fixed width/height + alignment, padding, an optional border and
+;; an outer margin.
+pub fn style_render(s_any: any, text: string) -> string is
+    let s: Style = s_any
+    let mut src: string = text
+    if s.wrap && s.width > 0 is src = tl_text::wrap_text(src, s.width) end
+    let mut raw_lines: [string] = str_split(src, "\n")
+    if s.max_width > 0 is
+        let mut cut: [string] = []
+        for l in raw_lines is cut.push(tl_text::truncate_str(l, s.max_width, "…")) end
+        raw_lines = cut
+    end
+    if s.height > 0 is raw_lines = fit_height(raw_lines, s.height, s.valign) end
+    let content_width: int = if s.width > 0 is s.width else is max_line_width(raw_lines) end
+    let prefix: string = sgr_prefix(s.bold, s.italic, s.underline, s.faint, s.strike, s.reverse, s.fg, s.bg)
+    let reset: string = if prefix == "" is "" else is "\x1b[0m" end
+
+    let mut body: [string] = []
+    let blank: string = tl_text::rep_str(" ", content_width + s.pad_x * 2)
+    let mut py: int = 0
+    while py < s.pad_y is
+        body.push(prefix + blank + reset)
+        py = py + 1
+    end
+    for line in raw_lines is
+        let aligned: string = align_line(line, content_width, s.align)
+        let inner: string = tl_text::rep_str(" ", s.pad_x) + aligned + tl_text::rep_str(" ", s.pad_x)
+        body.push(prefix + inner + reset)
+    end
+    py = 0
+    while py < s.pad_y is
+        body.push(prefix + blank + reset)
+        py = py + 1
+    end
+
+    let mut framed: [string] = body
+    if s.border != "none" is
+        let (h, v, tl, tr, bl, br) = border_chars(s.border)
+        let border_prefix: string = if s.border_color == "" is "" else is "\x1b[" + tl_color::fg_code(s.border_color) + "m" end
+        let border_reset: string = if border_prefix == "" is "" else is "\x1b[0m" end
+        let inner_width: int = content_width + s.pad_x * 2
+        let top: string = border_prefix + tl + tl_text::rep_str(h, inner_width) + tr + border_reset
+        let bottom: string = border_prefix + bl + tl_text::rep_str(h, inner_width) + br + border_reset
+        let mut boxed: [string] = []
+        boxed.push(top)
+        for line in body is
+            boxed.push(border_prefix + v + border_reset + line + border_prefix + v + border_reset)
+        end
+        boxed.push(bottom)
+        framed = boxed
+    end
+
+    if s.margin_x <= 0 && s.margin_y <= 0 is
+        return iter_join(framed, "\n")
+    end
+    let framed_width: int = max_line_width(framed)
+    let side: string = tl_text::rep_str(" ", tl_text::maxi(0, s.margin_x))
+    let empty_row: string = tl_text::rep_str(" ", framed_width + tl_text::maxi(0, s.margin_x) * 2)
+    let mut out: [string] = []
+    let mut my: int = 0
+    while my < s.margin_y is
+        out.push(empty_row)
+        my = my + 1
+    end
+    for line in framed is out.push(side + line + side) end
+    my = 0
+    while my < s.margin_y is
+        out.push(empty_row)
+        my = my + 1
+    end
+    return iter_join(out, "\n")
+end
