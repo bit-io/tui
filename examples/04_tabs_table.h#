@@ -1,0 +1,63 @@
+use "bit -> tui" from "tui"
+
+;; Tabs + table + sparkline/bar chart + status bar, with mouse wheel support.
+;; left/right (or tab, or 1-3) switch tabs, up/down (or the wheel) move in the table, q quits.
+
+struct Model is
+    pub tabs: any
+    pub table: any
+    pub width: int
+    pub height: int
+end
+
+fn init() -> any is
+    let rows: [[string]] = [
+        ["tui", "0.2.0", "58 KB"],
+        ["nidus", "1.4.2", "212 KB"],
+        ["landlock", "0.3.0", "31 KB"],
+        ["libseccomp", "2.5.5", "480 KB"],
+        ["progress-bar", "0.1.9", "12 KB"]
+    ]
+    let table: any = tui::table_new(["Package", "Version", "Size"], rows)
+    let tabs: any = tui::tabs_new(["Packages", "Activity", "About"])
+    return Model { tabs: tabs, table: table, width: 80, height: 24 }
+end
+
+fn update(model_any: any, msg: any) -> (any, fn() -> any) is
+    let model: Model = model_any
+    if tui::is_ctrl_c(msg) || tui::msg_is_key(msg, "q") is
+        return (model, tui::cmd_quit())
+    end
+    if tui::msg_is_resize(msg) is
+        return (Model { tabs: model.tabs, table: model.table, width: tui::msg_width(msg), height: tui::msg_height(msg) }, tui::cmd_none())
+    end
+    let tabs2: any = tui::tabs_update(model.tabs, msg)
+    let mut table2: any = model.table
+    if tui::tabs_active(tabs2) == 0 is
+        table2 = tui::table_update(model.table, msg)
+    end
+    return (Model { tabs: tabs2, table: table2, width: model.width, height: model.height }, tui::cmd_none())
+end
+
+fn view(model_any: any) -> string is
+    let model: Model = model_any
+    let active: int = tui::tabs_active(model.tabs)
+    let mut body: string = ""
+    if active == 0 is
+        body = tui::table_view(model.table)
+    elsif active == 1 is
+        let line: string = tui::sparkline([3, 5, 2, 8, 6, 9, 4, 7, 5, 10], "cyan")
+        let bars: string = tui::bar_chart(["mon", "tue", "wed"], [12, 30, 21], 20, "green")
+        body = "Requests per minute\n" + line + "\n\n" + bars
+    else is
+        body = tui::gradient("tui 0.2 - tabs, tables, charts, mouse", "#7dd3fc", "#c084fc")
+    end
+    let framed: string = tui::box_titled(tui::tabs_active_title(model.tabs), body, "rounded", "cyan")
+    let status: string = tui::statusbar("1-3 / ←→ tabs   ↑↓ rows", "q quit", model.width)
+    return tui::tabs_view(model.tabs) + "\n" + framed + "\n" + status
+end
+
+fn main() is
+    let opts: any = tui::options_mouse(tui::options_title(tui::options_new(), "tui demo"), true)
+    tui::run_with(init, update, view, opts)
+end
