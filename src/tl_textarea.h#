@@ -1,0 +1,255 @@
+struct TextArea is
+    pub lines: [string]
+    pub row: int
+    pub col: int
+    pub top: int
+    pub width: int
+    pub height: int
+    pub focused: bool
+    pub placeholder: string
+    pub line_numbers: bool
+    pub style: any
+    pub cursor_style: any
+end
+
+fn ta_make(lines: [string], row: int, col: int, top: int, width: int, height: int, focused: bool, placeholder: string, line_numbers: bool, style: any, cursor_style: any) -> any is
+    let mut ls: [string] = lines
+    if ls.len() == 0 is ls.push("") end
+    let r: int = tl_text::clampi(row, 0, ls.len() - 1)
+    let c: int = tl_text::clampi(col, 0, tl_text::char_count(ls[r]))
+    let mut t: int = top
+    if r < t is t = r end
+    if r >= t + height is t = r - height + 1 end
+    t = tl_text::clampi(t, 0, tl_text::maxi(0, ls.len() - height))
+    return TextArea {
+        lines: ls, row: r, col: c, top: t, width: width, height: height, focused: focused,
+        placeholder: placeholder, line_numbers: line_numbers, style: style, cursor_style: cursor_style
+    }
+end
+
+pub fn textarea_new(width: int, height: int) -> any is
+    let mut ls: [string] = []
+    ls.push("")
+    return ta_make(ls, 0, 0, 0, tl_text::maxi(1, width), tl_text::maxi(1, height), true, "", false, tl_style::style_new(), tl_style::style_fg(tl_style::style_bg(tl_style::style_new(), "white"), "black"))
+end
+
+fn ta_with(ta_any: any, lines: [string], row: int, col: int) -> any is
+    let ta: TextArea = ta_any
+    return ta_make(lines, row, col, ta.top, ta.width, ta.height, ta.focused, ta.placeholder, ta.line_numbers, ta.style, ta.cursor_style)
+end
+
+;; The whole text, lines joined with "\n".
+pub fn textarea_value(ta_any: any) -> string is
+    let ta: TextArea = ta_any
+    return iter_join(ta.lines, "\n")
+end
+
+;; Replace the text; the cursor goes to the end.
+pub fn textarea_set_value(ta_any: any, value: string) -> any is
+    let ta: TextArea = ta_any
+    let ls: [string] = str_split(value, "\n")
+    let last: int = ls.len() - 1
+    return ta_make(ls, last, tl_text::char_count(ls[last]), ta.top, ta.width, ta.height, ta.focused, ta.placeholder, ta.line_numbers, ta.style, ta.cursor_style)
+end
+
+pub fn textarea_line_count(ta_any: any) -> int is
+    let ta: TextArea = ta_any
+    return ta.lines.len()
+end
+
+;; Cursor row / column (both 0-based).
+pub fn textarea_cursor_row(ta_any: any) -> int is
+    let ta: TextArea = ta_any
+    return ta.row
+end
+
+pub fn textarea_cursor_col(ta_any: any) -> int is
+    let ta: TextArea = ta_any
+    return ta.col
+end
+
+pub fn textarea_focus(ta_any: any, on: bool) -> any is
+    let ta: TextArea = ta_any
+    return ta_make(ta.lines, ta.row, ta.col, ta.top, ta.width, ta.height, on, ta.placeholder, ta.line_numbers, ta.style, ta.cursor_style)
+end
+
+pub fn textarea_set_style(ta_any: any, style: any) -> any is
+    let ta: TextArea = ta_any
+    return ta_make(ta.lines, ta.row, ta.col, ta.top, ta.width, ta.height, ta.focused, ta.placeholder, ta.line_numbers, style, ta.cursor_style)
+end
+
+pub fn textarea_set_placeholder(ta_any: any, placeholder: string) -> any is
+    let ta: TextArea = ta_any
+    return ta_make(ta.lines, ta.row, ta.col, ta.top, ta.width, ta.height, ta.focused, placeholder, ta.line_numbers, ta.style, ta.cursor_style)
+end
+
+pub fn textarea_set_line_numbers(ta_any: any, on: bool) -> any is
+    let ta: TextArea = ta_any
+    return ta_make(ta.lines, ta.row, ta.col, ta.top, ta.width, ta.height, ta.focused, ta.placeholder, on, ta.style, ta.cursor_style)
+end
+
+pub fn textarea_set_size(ta_any: any, width: int, height: int) -> any is
+    let ta: TextArea = ta_any
+    return ta_make(ta.lines, ta.row, ta.col, ta.top, tl_text::maxi(1, width), tl_text::maxi(1, height), ta.focused, ta.placeholder, ta.line_numbers, ta.style, ta.cursor_style)
+end
+
+;; `lines` with line `row` replaced by `repl` (which may hold zero, one or more lines).
+fn lines_replace(lines: [string], row: int, repl: [string]) -> [string] is
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < lines.len() is
+        if i == row is
+            for r in repl is out.push(r) end
+        else is
+            out.push(lines[i])
+        end
+        i = i + 1
+    end
+    return out
+end
+
+;; `lines` with lines `row` and `row + 1` replaced by the single line `merged`.
+fn lines_merge(lines: [string], row: int, merged: string) -> [string] is
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < lines.len() is
+        if i == row is
+            out.push(merged)
+        elsif i != row + 1 is
+            out.push(lines[i])
+        end
+        i = i + 1
+    end
+    return out
+end
+
+;; Feed a `tui` message into the editor (no-op when unfocused / not a key).
+;;
+;; Keys: printable text, space, tab (4 spaces), enter (new line), backspace, delete,
+;; arrows, home / ctrl+a, end / ctrl+e, pgup / pgdown, ctrl+k (delete to end of
+;; line), ctrl+u (delete to start of line).
+pub fn textarea_update(ta_any: any, msg_any: any) -> any is
+    let ta: TextArea = ta_any
+    if !ta.focused || !tl_msg::msg_is_any_key(msg_any) is return ta end
+    let key: string = tl_msg::msg_key(msg_any)
+    let line: string = ta.lines[ta.row]
+    let n: int = tl_text::char_count(line)
+    let r: int = ta.row
+    let c: int = ta.col
+
+    if key == "enter" is
+        let mut pair: [string] = []
+        pair.push(line[0..c])
+        pair.push(line[c..n])
+        return ta_with(ta, lines_replace(ta.lines, r, pair), r + 1, 0)
+    end
+    if key == "backspace" is
+        if c > 0 is
+            let mut one: [string] = []
+            one.push(line[0..c - 1] + line[c..n])
+            return ta_with(ta, lines_replace(ta.lines, r, one), r, c - 1)
+        end
+        if r > 0 is
+            let prev: string = ta.lines[r - 1]
+            return ta_with(ta, lines_merge(ta.lines, r - 1, prev + line), r - 1, tl_text::char_count(prev))
+        end
+        return ta
+    end
+    if key == "delete" is
+        if c < n is
+            let mut one: [string] = []
+            one.push(line[0..c] + line[c + 1..n])
+            return ta_with(ta, lines_replace(ta.lines, r, one), r, c)
+        end
+        if r < ta.lines.len() - 1 is
+            return ta_with(ta, lines_merge(ta.lines, r, line + ta.lines[r + 1]), r, c)
+        end
+        return ta
+    end
+    if key == "left" is
+        if c > 0 is return ta_with(ta, ta.lines, r, c - 1) end
+        if r > 0 is return ta_with(ta, ta.lines, r - 1, tl_text::char_count(ta.lines[r - 1])) end
+        return ta
+    end
+    if key == "right" is
+        if c < n is return ta_with(ta, ta.lines, r, c + 1) end
+        if r < ta.lines.len() - 1 is return ta_with(ta, ta.lines, r + 1, 0) end
+        return ta
+    end
+    if key == "up" is return ta_with(ta, ta.lines, r - 1, c) end
+    if key == "down" is return ta_with(ta, ta.lines, r + 1, c) end
+    if key == "pgup" is return ta_with(ta, ta.lines, r - ta.height, c) end
+    if key == "pgdown" is return ta_with(ta, ta.lines, r + ta.height, c) end
+    if key == "home" || key == "ctrl+a" is return ta_with(ta, ta.lines, r, 0) end
+    if key == "end" || key == "ctrl+e" is return ta_with(ta, ta.lines, r, n) end
+    if key == "ctrl+k" is
+        let mut one: [string] = []
+        one.push(line[0..c])
+        return ta_with(ta, lines_replace(ta.lines, r, one), r, c)
+    end
+    if key == "ctrl+u" is
+        let mut one: [string] = []
+        one.push(line[c..n])
+        return ta_with(ta, lines_replace(ta.lines, r, one), r, 0)
+    end
+
+    let mut typed: string = ""
+    if key == "space" is
+        typed = " "
+    elsif key == "tab" is
+        typed = "    "
+    elsif !tl_keys::is_special_key(key) is
+        typed = key
+    end
+    if typed != "" is
+        let mut one: [string] = []
+        one.push(line[0..c] + typed + line[c..n])
+        return ta_with(ta, lines_replace(ta.lines, r, one), r, c + tl_text::char_count(typed))
+    end
+    return ta
+end
+
+pub fn textarea_view(ta_any: any) -> string is
+    let ta: TextArea = ta_any
+    let empty: bool = ta.lines.len() == 1 && ta.lines[0] == ""
+    let num_w: int = if ta.line_numbers is tl_text::char_count(to_string(ta.lines.len())) + 1 else is 0 end
+    let text_w: int = tl_text::maxi(1, ta.width - num_w)
+    let hoff: int = if ta.col >= text_w is ta.col - text_w + 1 else is 0 end
+
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < ta.height is
+        let idx: int = ta.top + i
+        let mut gutter: string = ""
+        if ta.line_numbers is
+            gutter = if idx < ta.lines.len() is tl_text::pad_left(to_string(idx + 1), num_w - 1) + " " else is tl_text::rep_str(" ", num_w) end
+        end
+        let mut body: string = ""
+        if idx < ta.lines.len() is
+            let line: string = ta.lines[idx]
+            if empty && ta.placeholder != "" && idx == 0 is
+                let ph: string = tl_text::utf8_take(ta.placeholder, text_w)
+                if ta.focused is
+                    body = tl_text::pad_right(tl_style::style_render(ta.cursor_style, " ") + tl_style::style_render(ta.style, ph), text_w)
+                else is
+                    body = tl_text::pad_right(tl_style::style_render(ta.style, ph), text_w)
+                end
+            elsif idx == ta.row && ta.focused is
+                let window: string = tl_text::utf8_take(tl_text::utf8_skip(line, hoff), text_w)
+                let rel: int = ta.col - hoff
+                let before: string = tl_text::utf8_take(window, rel)
+                let rest: string = tl_text::utf8_skip(window, rel)
+                let at_cursor: string = if rest == "" is " " else is tl_text::utf8_take(rest, 1) end
+                let after: string = tl_text::utf8_skip(rest, 1)
+                body = tl_text::pad_right(tl_style::style_render(ta.style, before) + tl_style::style_render(ta.cursor_style, at_cursor) + tl_style::style_render(ta.style, after), text_w)
+            else is
+                body = tl_text::pad_right(tl_style::style_render(ta.style, tl_text::utf8_take(tl_text::utf8_skip(line, hoff), text_w)), text_w)
+            end
+        else is
+            body = tl_text::rep_str(" ", text_w)
+        end
+        out.push(gutter + body)
+        i = i + 1
+    end
+    return iter_join(out, "\n")
+end
