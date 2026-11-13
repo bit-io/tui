@@ -1,0 +1,90 @@
+struct Viewport is
+    pub lines: [string]
+    pub top: int
+    pub width: int
+    pub height: int
+    pub style: any
+end
+
+pub fn viewport_new(width: int, height: int) -> any is
+    return Viewport { lines: [], top: 0, width: width, height: height, style: tl_style::style_new() }
+end
+
+pub fn viewport_set_content(vp_any: any, content: string) -> any is
+    let vp: Viewport = vp_any
+    return Viewport { lines: str_split(content, "\n"), top: 0, width: vp.width, height: vp.height, style: vp.style }
+end
+
+pub fn viewport_set_style(vp_any: any, style: any) -> any is
+    let vp: Viewport = vp_any
+    return Viewport { lines: vp.lines, top: vp.top, width: vp.width, height: vp.height, style: style }
+end
+
+;; Resize; the scroll position is kept inside the new bounds.
+pub fn viewport_set_size(vp_any: any, width: int, height: int) -> any is
+    let vp: Viewport = vp_any
+    let max_top: int = tl_text::maxi(0, vp.lines.len() - height)
+    return Viewport { lines: vp.lines, top: tl_text::clampi(vp.top, 0, max_top), width: width, height: height, style: vp.style }
+end
+
+pub fn viewport_scroll(vp_any: any, delta: int) -> any is
+    let vp: Viewport = vp_any
+    let max_top: int = tl_text::maxi(0, vp.lines.len() - vp.height)
+    let new_top: int = tl_text::clampi(vp.top + delta, 0, max_top)
+    return Viewport { lines: vp.lines, top: new_top, width: vp.width, height: vp.height, style: vp.style }
+end
+
+pub fn viewport_line_count(vp_any: any) -> int is
+    let vp: Viewport = vp_any
+    return vp.lines.len()
+end
+
+pub fn viewport_at_top(vp_any: any) -> bool is
+    let vp: Viewport = vp_any
+    return vp.top <= 0
+end
+
+pub fn viewport_at_bottom(vp_any: any) -> bool is
+    let vp: Viewport = vp_any
+    return vp.top >= tl_text::maxi(0, vp.lines.len() - vp.height)
+end
+
+;; How far down the content the view is, 0..100 (100 when everything fits).
+pub fn viewport_scroll_percent(vp_any: any) -> int is
+    let vp: Viewport = vp_any
+    let max_top: int = vp.lines.len() - vp.height
+    if max_top <= 0 is return 100 end
+    return tl_text::clampi((vp.top * 100) / max_top, 0, 100)
+end
+
+;; Keys: up/k, down/j, pgup, pgdown, ctrl+u / ctrl+d (half page), home/g, end/G,
+;; and the mouse wheel (3 lines per notch).
+pub fn viewport_update(vp_any: any, msg_any: any) -> any is
+    let vp: Viewport = vp_any
+    if tl_msg::msg_is_wheel_up(msg_any) is return viewport_scroll(vp, -3) end
+    if tl_msg::msg_is_wheel_down(msg_any) is return viewport_scroll(vp, 3) end
+    if !tl_msg::msg_is_any_key(msg_any) is return vp end
+    let key: string = tl_msg::msg_key(msg_any)
+    if key == "up" || key == "k" is return viewport_scroll(vp, -1) end
+    if key == "down" || key == "j" is return viewport_scroll(vp, 1) end
+    if key == "pgup" is return viewport_scroll(vp, -vp.height) end
+    if key == "pgdown" is return viewport_scroll(vp, vp.height) end
+    if key == "ctrl+u" is return viewport_scroll(vp, -(vp.height / 2)) end
+    if key == "ctrl+d" is return viewport_scroll(vp, vp.height / 2) end
+    if key == "home" || key == "g" is return viewport_scroll(vp, -vp.lines.len()) end
+    if key == "end" || key == "G" is return viewport_scroll(vp, vp.lines.len()) end
+    return vp
+end
+
+pub fn viewport_view(vp_any: any) -> string is
+    let vp: Viewport = vp_any
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < vp.height is
+        let idx: int = vp.top + i
+        let line: string = if idx < vp.lines.len() is vp.lines[idx] else is "" end
+        out.push(tl_text::pad_right(tl_text::truncate_str(line, vp.width, ""), vp.width))
+        i = i + 1
+    end
+    return tl_style::style_render(vp.style, iter_join(out, "\n"))
+end
