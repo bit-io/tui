@@ -1,0 +1,78 @@
+struct Timer is
+    pub started_at_ms: int
+    pub stopped_elapsed_ms: int
+    pub running: bool
+    pub limit_ms: int          ;; 0 = stopwatch; > 0 = countdown from this many ms
+end
+
+;; A running stopwatch.
+pub fn timer_new() -> any is
+    return Timer { started_at_ms: __builtin_time_now_ms(), stopped_elapsed_ms: 0, running: true, limit_ms: 0 }
+end
+
+;; A running countdown from `ms` milliseconds.
+pub fn timer_new_countdown(ms: int) -> any is
+    return Timer { started_at_ms: __builtin_time_now_ms(), stopped_elapsed_ms: 0, running: true, limit_ms: tl_text::maxi(0, ms) }
+end
+
+pub fn timer_start(t_any: any) -> any is
+    let t: Timer = t_any
+    if t.running is return t end
+    return Timer { started_at_ms: __builtin_time_now_ms() - t.stopped_elapsed_ms, stopped_elapsed_ms: 0, running: true, limit_ms: t.limit_ms }
+end
+
+pub fn timer_stop(t_any: any) -> any is
+    let t: Timer = t_any
+    if !t.running is return t end
+    return Timer { started_at_ms: t.started_at_ms, stopped_elapsed_ms: __builtin_time_now_ms() - t.started_at_ms, running: false, limit_ms: t.limit_ms }
+end
+
+;; Back to zero (a countdown to its full length), running.
+pub fn timer_reset(t_any: any) -> any is
+    let t: Timer = t_any
+    return Timer { started_at_ms: __builtin_time_now_ms(), stopped_elapsed_ms: 0, running: true, limit_ms: t.limit_ms }
+end
+
+pub fn timer_running(t_any: any) -> bool is
+    let t: Timer = t_any
+    return t.running
+end
+
+pub fn timer_elapsed_ms(t_any: any) -> int is
+    let t: Timer = t_any
+    if t.running is return __builtin_time_now_ms() - t.started_at_ms end
+    return t.stopped_elapsed_ms
+end
+
+;; Milliseconds left on a countdown (0 once it ran out; 0 for a stopwatch).
+pub fn timer_remaining_ms(t_any: any) -> int is
+    let t: Timer = t_any
+    if t.limit_ms <= 0 is return 0 end
+    return tl_text::maxi(0, t.limit_ms - timer_elapsed_ms(t))
+end
+
+;; True when a countdown has run out (always false for a stopwatch).
+pub fn timer_done(t_any: any) -> bool is
+    let t: Timer = t_any
+    if t.limit_ms <= 0 is return false end
+    return timer_elapsed_ms(t) >= t.limit_ms
+end
+
+;; "mm:ss" for under an hour, "h:mm:ss" from one hour up.
+pub fn format_duration_ms(ms: int) -> string is
+    let total_s: int = tl_text::maxi(0, ms) / 1000
+    let h: int = total_s / 3600
+    let m: int = (total_s % 3600) / 60
+    let s: int = total_s % 60
+    let mm: string = if m < 10 is "0" + to_string(m) else is to_string(m) end
+    let ss: string = if s < 10 is "0" + to_string(s) else is to_string(s) end
+    if h > 0 is return to_string(h) + ":" + mm + ":" + ss end
+    return mm + ":" + ss
+end
+
+;; Elapsed time of a stopwatch, remaining time of a countdown ("mm:ss" / "h:mm:ss").
+pub fn timer_view(t_any: any) -> string is
+    let t: Timer = t_any
+    if t.limit_ms > 0 is return format_duration_ms(timer_remaining_ms(t)) end
+    return format_duration_ms(timer_elapsed_ms(t))
+end
