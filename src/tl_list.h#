@@ -1,0 +1,136 @@
+struct ListModel is
+    pub items: [string]        ;; the items currently shown (after filtering)
+    pub all_items: [string]    ;; every item, unfiltered
+    pub filter: string
+    pub cursor: int
+    pub top: int
+    pub height: int
+    pub wrap: bool             ;; up on the first item jumps to the last, and vice versa
+    pub style: any
+    pub selected_style: any
+end
+
+fn list_make(items: [string], all_items: [string], filter: string, cursor: int, top: int, height: int, wrap: bool, style: any, selected_style: any) -> any is
+    return ListModel {
+        items: items, all_items: all_items, filter: filter, cursor: cursor, top: top,
+        height: height, wrap: wrap, style: style, selected_style: selected_style
+    }
+end
+
+pub fn list_new(items: [string]) -> any is
+    return list_make(items, items, "", 0, 0, tl_text::mini(10, items.len()), false, tl_style::style_new(), tl_style::style_bold(tl_style::style_fg(tl_style::style_new(), "cyan"), true))
+end
+
+pub fn list_set_height(l_any: any, height: int) -> any is
+    let l: ListModel = l_any
+    return list_make(l.items, l.all_items, l.filter, l.cursor, l.top, height, l.wrap, l.style, l.selected_style)
+end
+
+;; Replace the items (clears any filter and moves the cursor to the top).
+pub fn list_set_items(l_any: any, items: [string]) -> any is
+    let l: ListModel = l_any
+    return list_make(items, items, "", 0, 0, l.height, l.wrap, l.style, l.selected_style)
+end
+
+pub fn list_set_style(l_any: any, style: any, selected_style: any) -> any is
+    let l: ListModel = l_any
+    return list_make(l.items, l.all_items, l.filter, l.cursor, l.top, l.height, l.wrap, style, selected_style)
+end
+
+;; With `on`, moving up from the first item lands on the last one (and vice versa).
+pub fn list_set_wrap(l_any: any, on: bool) -> any is
+    let l: ListModel = l_any
+    return list_make(l.items, l.all_items, l.filter, l.cursor, l.top, l.height, on, l.style, l.selected_style)
+end
+
+fn list_reclamp(l_any: any, cursor: int) -> any is
+    let l: ListModel = l_any
+    let n: int = l.items.len()
+    let mut want: int = cursor
+    if l.wrap && n > 0 is
+        if want < 0 is want = n - 1 end
+        if want >= n is want = 0 end
+    end
+    let c: int = tl_text::clampi(want, 0, tl_text::maxi(0, n - 1))
+    let mut top: int = l.top
+    if c < top is top = c end
+    if c >= top + l.height is top = c - l.height + 1 end
+    top = tl_text::clampi(top, 0, tl_text::maxi(0, n - l.height))
+    return list_make(l.items, l.all_items, l.filter, c, top, l.height, l.wrap, l.style, l.selected_style)
+end
+
+;; Move the cursor to item `index` (clamped), scrolling it into view.
+pub fn list_set_cursor(l_any: any, index: int) -> any is
+    return list_reclamp(l_any, index)
+end
+
+;; Show only the items containing `text` (case-insensitive, ASCII); "" shows all.
+;; The cursor goes back to the first match.
+pub fn list_set_filter(l_any: any, text: string) -> any is
+    let l: ListModel = l_any
+    if text == "" is
+        return list_make(l.all_items, l.all_items, "", 0, 0, l.height, l.wrap, l.style, l.selected_style)
+    end
+    let needle: string = tl_text::lower_ascii(text)
+    let mut kept: [string] = []
+    for it in l.all_items is
+        if tl_text::contains_text(tl_text::lower_ascii(it), needle) is kept.push(it) end
+    end
+    return list_make(kept, l.all_items, text, 0, 0, l.height, l.wrap, l.style, l.selected_style)
+end
+
+pub fn list_filter_text(l_any: any) -> string is
+    let l: ListModel = l_any
+    return l.filter
+end
+
+;; Number of items currently shown (after filtering).
+pub fn list_len(l_any: any) -> int is
+    let l: ListModel = l_any
+    return l.items.len()
+end
+
+;; Keys: up, down, pgup, pgdown, home, end, and the mouse wheel.
+pub fn list_update(l_any: any, msg_any: any) -> any is
+    let l: ListModel = l_any
+    if tl_msg::msg_is_wheel_up(msg_any) is return list_reclamp(l, l.cursor - 1) end
+    if tl_msg::msg_is_wheel_down(msg_any) is return list_reclamp(l, l.cursor + 1) end
+    if !tl_msg::msg_is_any_key(msg_any) is return l end
+    let key: string = tl_msg::msg_key(msg_any)
+    if key == "up" is return list_reclamp(l, l.cursor - 1) end
+    if key == "down" is return list_reclamp(l, l.cursor + 1) end
+    if key == "pgup" is return list_reclamp(l, l.cursor - l.height) end
+    if key == "pgdown" is return list_reclamp(l, l.cursor + l.height) end
+    if key == "home" is return list_reclamp(l, 0) end
+    if key == "end" is return list_reclamp(l, l.items.len() - 1) end
+    return l
+end
+
+pub fn list_selected_index(l_any: any) -> int is
+    let l: ListModel = l_any
+    return l.cursor
+end
+
+pub fn list_selected(l_any: any) -> string is
+    let l: ListModel = l_any
+    if l.items.len() == 0 is return "" end
+    return l.items[l.cursor]
+end
+
+pub fn list_view(l_any: any) -> string is
+    let l: ListModel = l_any
+    let mut out: [string] = []
+    let n: int = l.items.len()
+    let mut i: int = l.top
+    let end_idx: int = tl_text::mini(n, l.top + l.height)
+    while i < end_idx is
+        let raw: string = l.items[i]
+        if i == l.cursor is
+            out.push(tl_style::style_render(l.selected_style, "› " + raw))
+        else is
+            out.push("  " + raw)
+        end
+        i = i + 1
+    end
+    return tl_style::style_render(l.style, iter_join(out, "\n"))
+end
