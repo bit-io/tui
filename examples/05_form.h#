@@ -1,0 +1,81 @@
+use "bit -> tui" from "tui"
+
+;; A small multi-step form: name -> password (masked) -> options (checklist) -> confirm.
+;; enter moves to the next step, esc quits.
+
+struct Model is
+    pub stage: int
+    pub name: any
+    pub pass: any
+    pub opts: any
+    pub confirm: any
+end
+
+fn init() -> any is
+    let name: any = tui::textinput_set_prompt(tui::textinput_new("your name"), "Name:     ")
+    let pass0: any = tui::textinput_set_prompt(tui::textinput_new("password"), "Password: ")
+    let pass: any = tui::textinput_focus(tui::textinput_set_echo(pass0, "*"), false)
+    let opts: any = tui::checklist_new(["Enable telemetry", "Start on boot", "Install extras"])
+    let confirm: any = tui::confirm_new("Create the account?")
+    return Model { stage: 0, name: name, pass: pass, opts: opts, confirm: confirm }
+end
+
+fn update(model_any: any, msg: any) -> (any, fn() -> any) is
+    let model: Model = model_any
+    if tui::is_ctrl_c(msg) || tui::msg_is_key(msg, "esc") is
+        return (model, tui::cmd_quit())
+    end
+    if model.stage == 0 is
+        if tui::msg_is_key(msg, "enter") is
+            return (Model { stage: 1, name: tui::textinput_focus(model.name, false), pass: tui::textinput_focus(model.pass, true), opts: model.opts, confirm: model.confirm }, tui::cmd_none())
+        end
+        return (Model { stage: 0, name: tui::textinput_update(model.name, msg), pass: model.pass, opts: model.opts, confirm: model.confirm }, tui::cmd_none())
+    end
+    if model.stage == 1 is
+        if tui::msg_is_key(msg, "enter") is
+            return (Model { stage: 2, name: model.name, pass: tui::textinput_focus(model.pass, false), opts: model.opts, confirm: model.confirm }, tui::cmd_none())
+        end
+        return (Model { stage: 1, name: model.name, pass: tui::textinput_update(model.pass, msg), opts: model.opts, confirm: model.confirm }, tui::cmd_none())
+    end
+    if model.stage == 2 is
+        if tui::msg_is_key(msg, "enter") is
+            return (Model { stage: 3, name: model.name, pass: model.pass, opts: model.opts, confirm: model.confirm }, tui::cmd_none())
+        end
+        return (Model { stage: 2, name: model.name, pass: model.pass, opts: tui::checklist_update(model.opts, msg), confirm: model.confirm }, tui::cmd_none())
+    end
+    if model.stage == 3 is
+        let c2: any = tui::confirm_update(model.confirm, msg)
+        if tui::confirm_done(c2) is
+            return (Model { stage: 4, name: model.name, pass: model.pass, opts: model.opts, confirm: c2 }, tui::cmd_none())
+        end
+        return (Model { stage: 3, name: model.name, pass: model.pass, opts: model.opts, confirm: c2 }, tui::cmd_none())
+    end
+    if tui::msg_is_key(msg, "enter") is
+        return (model, tui::cmd_quit())
+    end
+    return (model, tui::cmd_none())
+end
+
+fn view(model_any: any) -> string is
+    let model: Model = model_any
+    let title: string = tui::style_render(tui::style_bold(tui::style_fg(tui::style_new(), "cyan"), true), "New account")
+    if model.stage == 4 is
+        let chosen: [string] = tui::checklist_selected(model.opts)
+        let verdict: string = if tui::confirm_result(model.confirm) is "created" else is "cancelled" end
+        return title + "\n\n" + "User " + tui::textinput_value(model.name) + ": " + verdict + "\n" +
+            "Options: " + to_string(chosen.len()) + " selected\n\n" + tui::help_view(["enter"], ["quit"])
+    end
+    let mut body: string = tui::textinput_view(model.name) + "\n" + tui::textinput_view(model.pass)
+    if model.stage >= 2 is
+        body = body + "\n\n" + tui::checklist_view(model.opts)
+    end
+    if model.stage >= 3 is
+        body = body + "\n\n" + tui::confirm_view(model.confirm)
+    end
+    let help: string = tui::help_view(["enter", "space", "esc"], ["next", "toggle", "quit"])
+    return title + "\n\n" + body + "\n\n" + help
+end
+
+fn main() is
+    tui::run_no_tick(init, update, view)
+end
