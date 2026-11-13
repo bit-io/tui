@@ -1,0 +1,93 @@
+struct Paginator is
+    pub page: int          ;; 0-based
+    pub total_pages: int
+    pub active_style: any
+    pub inactive_style: any
+end
+
+pub fn paginator_new(total_pages: int) -> any is
+    return Paginator {
+        page: 0, total_pages: tl_text::maxi(1, total_pages),
+        active_style: tl_style::style_fg(tl_style::style_new(), "cyan"),
+        inactive_style: tl_style::style_fg(tl_style::style_new(), "bright_black")
+    }
+end
+
+pub fn paginator_page(p_any: any) -> int is
+    let p: Paginator = p_any
+    return p.page
+end
+
+pub fn paginator_total(p_any: any) -> int is
+    let p: Paginator = p_any
+    return p.total_pages
+end
+
+pub fn paginator_set_page(p_any: any, page: int) -> any is
+    let p: Paginator = p_any
+    return Paginator {
+        page: tl_text::clampi(page, 0, p.total_pages - 1), total_pages: p.total_pages,
+        active_style: p.active_style, inactive_style: p.inactive_style
+    }
+end
+
+;; Change the number of pages (the current page is clamped into range).
+pub fn paginator_set_total(p_any: any, total_pages: int) -> any is
+    let p: Paginator = p_any
+    let total: int = tl_text::maxi(1, total_pages)
+    return Paginator {
+        page: tl_text::clampi(p.page, 0, total - 1), total_pages: total,
+        active_style: p.active_style, inactive_style: p.inactive_style
+    }
+end
+
+pub fn paginator_next(p_any: any) -> any is
+    let p: Paginator = p_any
+    return paginator_set_page(p, p.page + 1)
+end
+
+pub fn paginator_prev(p_any: any) -> any is
+    let p: Paginator = p_any
+    return paginator_set_page(p, p.page - 1)
+end
+
+;; Keys: left / right, pgup / pgdown.
+pub fn paginator_update(p: any, msg_any: any) -> any is
+    if !tl_msg::msg_is_any_key(msg_any) is return p end
+    let key: string = tl_msg::msg_key(msg_any)
+    if key == "left" || key == "pgup" is return paginator_prev(p) end
+    if key == "right" || key == "pgdown" is return paginator_next(p) end
+    return p
+end
+
+pub fn paginator_view(p_any: any) -> string is
+    let p: Paginator = p_any
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < p.total_pages is
+        let dot: string = if i == p.page is tl_style::style_render(p.active_style, "●") else is tl_style::style_render(p.inactive_style, "○") end
+        out = out + dot
+        if i < p.total_pages - 1 is out = out + " " end
+        i = i + 1
+    end
+    return out
+end
+
+;; "2/5" style label (1-based current page).
+pub fn paginator_view_text(p_any: any) -> string is
+    let p: Paginator = p_any
+    return to_string(p.page + 1) + "/" + to_string(p.total_pages)
+end
+
+;; Number of pages needed for `total_items` items at `per_page` per page (at least 1).
+pub fn pages_for(total_items: int, per_page: int) -> int is
+    if per_page <= 0 || total_items <= 0 is return 1 end
+    return (total_items + per_page - 1) / per_page
+end
+
+;; (start, end) item indexes of `page` (0-based): items start..end-1 belong to it.
+pub fn page_bounds(page: int, per_page: int, total_items: int) -> (int, int) is
+    let start: int = tl_text::clampi(page * per_page, 0, tl_text::maxi(0, total_items))
+    let stop: int = tl_text::clampi(start + per_page, 0, tl_text::maxi(0, total_items))
+    return (start, stop)
+end
