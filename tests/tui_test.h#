@@ -1,0 +1,159 @@
+use "std -> test" from "test"
+use "bit -> tui" from "tui"
+
+#[test]
+fn test_visible_len_ignores_ansi() is
+    assert_eq(tui::visible_len(tui::colorize("hello", "red")), 5)
+    assert_eq(tui::strip_ansi(tui::colorize("hello", "red")), "hello")
+end
+
+#[test]
+fn test_padding() is
+    assert_eq(tui::pad_right("ab", 5), "ab   ")
+    assert_eq(tui::pad_left("ab", 5), "   ab")
+    assert_eq(tui::pad_center("ab", 6), "  ab  ")
+end
+
+#[test]
+fn test_truncate_and_wrap() is
+    assert_eq(tui::truncate_str("hello world", 20, "~"), "hello world")
+    assert_eq(tui::truncate_str("hello world", 8, "~"), "hello w~")
+    assert_eq(tui::wrap_text("aaa bbb ccc", 7), "aaa bbb\nccc")
+end
+
+#[test]
+fn test_utf8_take_skip() is
+    assert_eq(tui::utf8_take("abcdef", 3), "abc")
+    assert_eq(tui::utf8_skip("abcdef", 3), "def")
+    assert_eq(tui::utf8_skip("abc", 5), "")
+end
+
+#[test]
+fn test_color_lerp() is
+    assert_eq(tui::color_lerp("#000000", "#ffffff", 0), "#000000")
+    assert_eq(tui::color_lerp("#000000", "#ffffff", 100), "#ffffff")
+    assert_eq(tui::rgb_hex(255, 0, 16), "#ff0010")
+end
+
+#[test]
+fn test_style_height_and_margin() is
+    let s: any = tui::style_height(tui::style_new(), 3)
+    let lines: [string] = str_split(tui::style_render(s, "x"), "\n")
+    assert_eq(lines.len(), 3)
+    let m: any = tui::style_margin(tui::style_new(), 1, 1)
+    let mlines: [string] = str_split(tui::style_render(m, "x"), "\n")
+    assert_eq(mlines.len(), 3)
+end
+
+#[test]
+fn test_join_horizontal() is
+    assert_eq(tui::join_horizontal(["a\nb", "c"], 1), "a c\nb  ")
+    assert_eq(tui::block_width("ab\nabc"), 3)
+    assert_eq(tui::block_height("ab\nabc"), 2)
+end
+
+#[test]
+fn test_progress_view() is
+    let p0: any = tui::progress_set_chars(tui::progress_new(10), "#", "-")
+    let p: any = tui::progress_set(p0, 50)
+    assert_eq(tui::strip_ansi(tui::progress_view(p)), "[#####-----] 50%")
+    assert_eq(tui::progress_percent(tui::progress_incr(p, 70)), 100)
+end
+
+#[test]
+fn test_textinput_editing() is
+    let mut ti: any = tui::textinput_new("")
+    ti = tui::textinput_update(ti, tui::key_msg("h"))
+    ti = tui::textinput_update(ti, tui::key_msg("i"))
+    assert_eq(tui::textinput_value(ti), "hi")
+    ti = tui::textinput_update(ti, tui::key_msg("backspace"))
+    assert_eq(tui::textinput_value(ti), "h")
+    let words: any = tui::textinput_set_value(tui::textinput_new(""), "hello world")
+    assert_eq(tui::textinput_value(tui::textinput_update(words, tui::key_msg("ctrl+w"))), "hello ")
+    let limited: any = tui::textinput_set_limit(tui::textinput_new(""), 2)
+    let l2: any = tui::textinput_update(tui::textinput_update(tui::textinput_update(limited, tui::key_msg("a")), tui::key_msg("b")), tui::key_msg("c"))
+    assert_eq(tui::textinput_value(l2), "ab")
+end
+
+#[test]
+fn test_textarea_lines() is
+    let mut ta: any = tui::textarea_new(20, 5)
+    ta = tui::textarea_update(ta, tui::key_msg("a"))
+    ta = tui::textarea_update(ta, tui::key_msg("enter"))
+    ta = tui::textarea_update(ta, tui::key_msg("b"))
+    assert_eq(tui::textarea_value(ta), "a\nb")
+    assert_eq(tui::textarea_line_count(ta), 2)
+    ta = tui::textarea_update(ta, tui::key_msg("home"))
+    ta = tui::textarea_update(ta, tui::key_msg("backspace"))
+    assert_eq(tui::textarea_value(ta), "ab")
+end
+
+#[test]
+fn test_list_filter() is
+    let l: any = tui::list_new(["Apple", "banana", "Cherry"])
+    let f: any = tui::list_set_filter(l, "AN")
+    assert_eq(tui::list_len(f), 1)
+    assert_eq(tui::list_selected(f), "banana")
+    assert_eq(tui::list_len(tui::list_set_filter(f, "")), 3)
+end
+
+#[test]
+fn test_checklist() is
+    let c: any = tui::checklist_toggle(tui::checklist_new(["a", "b", "c"]), 1)
+    let picked: [string] = tui::checklist_selected(c)
+    assert_eq(picked.len(), 1)
+    assert_eq(picked[0], "b")
+    assert_true(tui::checklist_is_checked(c, 1))
+    assert_false(tui::checklist_is_checked(c, 0))
+end
+
+#[test]
+fn test_table_selection() is
+    let t: any = tui::table_new(["k", "v"], [["a", "1"], ["b", "2"]])
+    let t2: any = tui::table_update(t, tui::key_msg("down"))
+    assert_eq(tui::table_selected_index(t2), 1)
+    let row: [string] = tui::table_selected_row(t2)
+    assert_eq(row[0], "b")
+    assert_eq(tui::table_row_count(t2), 2)
+end
+
+#[test]
+fn test_tabs_wrap() is
+    let t: any = tui::tabs_new(["a", "b", "c"])
+    assert_eq(tui::tabs_active(tui::tabs_prev(t)), 2)
+    assert_eq(tui::tabs_active(tui::tabs_next(tui::tabs_set_active(t, 2))), 0)
+    assert_eq(tui::tabs_active_title(tui::tabs_update(t, tui::key_msg("2"))), "b")
+end
+
+#[test]
+fn test_confirm() is
+    let c: any = tui::confirm_new("ok?")
+    assert_false(tui::confirm_done(c))
+    let n: any = tui::confirm_update(c, tui::key_msg("n"))
+    assert_true(tui::confirm_done(n))
+    assert_false(tui::confirm_result(n))
+end
+
+#[test]
+fn test_paging_and_time() is
+    assert_eq(tui::pages_for(25, 10), 3)
+    let (a, b) = tui::page_bounds(2, 10, 25)
+    assert_eq(a, 20)
+    assert_eq(b, 25)
+    assert_eq(tui::format_duration_ms(65000), "01:05")
+    assert_eq(tui::format_duration_ms(3725000), "1:02:05")
+end
+
+#[test]
+fn test_messages() is
+    let m: any = tui::mouse_msg("left", "press", 4, 7)
+    assert_true(tui::msg_is_mouse(m))
+    assert_true(tui::msg_is_click(m))
+    assert_eq(tui::msg_x(m), 4)
+    assert_eq(tui::msg_y(m), 7)
+    assert_true(tui::should_quit(tui::key_msg("q")))
+    assert_true(tui::msg_is_key_in(tui::key_msg("b"), ["a", "b"]))
+    assert_true(tui::is_special_key("ctrl+left"))
+    assert_true(tui::is_special_key("f5"))
+    assert_false(tui::is_special_key("f"))
+end
