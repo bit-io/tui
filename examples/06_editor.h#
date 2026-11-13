@@ -1,0 +1,35 @@
+use "bit -> tui" from "tui"
+
+;; A tiny multi-line editor. Type to edit, arrows/home/end/pgup/pgdown to move,
+;; ctrl+k / ctrl+u delete to end / start of the line, esc quits and prints the text.
+
+struct Model is
+    pub ed: any
+end
+
+fn init() -> any is
+    let ed0: any = tui::textarea_set_line_numbers(tui::textarea_new(60, 12), true)
+    let ed: any = tui::textarea_set_placeholder(ed0, "start typing...")
+    return Model { ed: ed }
+end
+
+fn update(model_any: any, msg: any) -> (any, fn() -> any) is
+    let model: Model = model_any
+    if tui::is_ctrl_c(msg) || tui::msg_is_key(msg, "esc") is
+        return (model, tui::cmd_quit())
+    end
+    return (Model { ed: tui::textarea_update(model.ed, msg) }, tui::cmd_none())
+end
+
+fn view(model_any: any) -> string is
+    let model: Model = model_any
+    let pos: string = "Ln " + to_string(tui::textarea_cursor_row(model.ed) + 1) + ", Col " + to_string(tui::textarea_cursor_col(model.ed) + 1)
+    let framed: string = tui::style_render(tui::style_border(tui::style_new(), "rounded"), tui::textarea_view(model.ed))
+    return framed + "\n" + tui::statusbar("esc quit", pos, 62)
+end
+
+fn main() is
+    let final_model: any = tui::run_no_tick(init, update, view)
+    let m: Model = final_model
+    write(tui::textarea_value(m.ed))
+end
