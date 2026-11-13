@@ -1,0 +1,106 @@
+struct Progress is
+    pub percent: int         ;; 0-100
+    pub width: int
+    pub filled_style: any
+    pub filled_char: string
+    pub empty_char: string
+    pub show_percent: bool
+    pub grad_from: string    ;; "" = no gradient; otherwise "#rrggbb" at the left end
+    pub grad_to: string      ;; "#rrggbb" at the right end
+end
+
+pub fn progress_new(width: int) -> any is
+    return Progress {
+        percent: 0, width: width, filled_style: tl_style::style_fg(tl_style::style_new(), "green"),
+        filled_char: "█", empty_char: "░", show_percent: true, grad_from: "", grad_to: ""
+    }
+end
+
+pub fn progress_set(p_any: any, percent: int) -> any is
+    let p: Progress = p_any
+    return Progress {
+        percent: tl_text::clampi(percent, 0, 100), width: p.width, filled_style: p.filled_style,
+        filled_char: p.filled_char, empty_char: p.empty_char, show_percent: p.show_percent,
+        grad_from: p.grad_from, grad_to: p.grad_to
+    }
+end
+
+;; Add `delta` percent (may be negative); the result is clamped to 0..100.
+pub fn progress_incr(p_any: any, delta: int) -> any is
+    let p: Progress = p_any
+    return progress_set(p, p.percent + delta)
+end
+
+pub fn progress_set_style(p_any: any, style: any) -> any is
+    let p: Progress = p_any
+    return Progress {
+        percent: p.percent, width: p.width, filled_style: style,
+        filled_char: p.filled_char, empty_char: p.empty_char, show_percent: p.show_percent,
+        grad_from: p.grad_from, grad_to: p.grad_to
+    }
+end
+
+pub fn progress_set_width(p_any: any, width: int) -> any is
+    let p: Progress = p_any
+    return Progress {
+        percent: p.percent, width: tl_text::maxi(1, width), filled_style: p.filled_style,
+        filled_char: p.filled_char, empty_char: p.empty_char, show_percent: p.show_percent,
+        grad_from: p.grad_from, grad_to: p.grad_to
+    }
+end
+
+;; The characters used for the filled and the empty part of the bar.
+pub fn progress_set_chars(p_any: any, filled: string, empty: string) -> any is
+    let p: Progress = p_any
+    return Progress {
+        percent: p.percent, width: p.width, filled_style: p.filled_style,
+        filled_char: filled, empty_char: empty, show_percent: p.show_percent,
+        grad_from: p.grad_from, grad_to: p.grad_to
+    }
+end
+
+;; Show or hide the trailing "NN%" label.
+pub fn progress_show_percent(p_any: any, on: bool) -> any is
+    let p: Progress = p_any
+    return Progress {
+        percent: p.percent, width: p.width, filled_style: p.filled_style,
+        filled_char: p.filled_char, empty_char: p.empty_char, show_percent: on,
+        grad_from: p.grad_from, grad_to: p.grad_to
+    }
+end
+
+;; Color the filled part with a left-to-right gradient between two "#rrggbb" colors
+;; (overrides the filled style's color).
+pub fn progress_set_gradient(p_any: any, c1: string, c2: string) -> any is
+    let p: Progress = p_any
+    return Progress {
+        percent: p.percent, width: p.width, filled_style: p.filled_style,
+        filled_char: p.filled_char, empty_char: p.empty_char, show_percent: p.show_percent,
+        grad_from: c1, grad_to: c2
+    }
+end
+
+pub fn progress_percent(p_any: any) -> int is
+    let p: Progress = p_any
+    return p.percent
+end
+
+pub fn progress_view(p_any: any) -> string is
+    let p: Progress = p_any
+    let filled_n: int = (p.width * p.percent) / 100
+    let empty_n: int = p.width - filled_n
+    let mut filled: string = ""
+    if p.grad_from != "" is
+        let mut i: int = 0
+        while i < filled_n is
+            let pct: int = if p.width <= 1 is 0 else is (i * 100) / (p.width - 1) end
+            filled = filled + tl_color::colorize(p.filled_char, tl_color::color_lerp(p.grad_from, p.grad_to, pct))
+            i = i + 1
+        end
+    else is
+        filled = tl_style::style_render(p.filled_style, tl_text::rep_str(p.filled_char, filled_n))
+    end
+    let bar: string = filled + tl_text::rep_str(p.empty_char, empty_n)
+    if !p.show_percent is return "[" + bar + "]" end
+    return "[" + bar + "] " + to_string(p.percent) + "%"
+end
