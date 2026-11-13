@@ -1,0 +1,354 @@
+pub fn clampi(n: int, lo: int, hi: int) -> int is
+    if n < lo is return lo end
+    if n > hi is return hi end
+    return n
+end
+
+;;@internal
+pub fn maxi(a: int, b: int) -> int is
+    if a > b is return a end
+    return b
+end
+
+;;@internal
+pub fn mini(a: int, b: int) -> int is
+    if a < b is return a end
+    return b
+end
+
+;;@internal
+pub fn is_ws_ch(ch: string) -> bool is
+    return ch == " " || ch == "\t" || ch == "\n" || ch == "\r"
+end
+
+;;@internal
+pub fn char_count(s: string) -> int is
+    let mut i: int = 0
+    while s[i..i + 1] != "" is
+        i = i + 1
+    end
+    return i
+end
+
+pub fn trim_str(s: string) -> string is
+    let n: int = char_count(s)
+    let mut i: int = 0
+    while i < n && is_ws_ch(s[i..i + 1]) is
+        i = i + 1
+    end
+    let mut j: int = n
+    while j > i && is_ws_ch(s[j - 1..j]) is
+        j = j - 1
+    end
+    return s[i..j]
+end
+
+pub fn rep_str(s: string, n: int) -> string is
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < n is
+        out = out + s
+        i = i + 1
+    end
+    return out
+end
+
+pub fn pad_right(s: string, width: int) -> string is
+    let diff: int = width - visible_len(s)
+    if diff <= 0 is return s end
+    return s + rep_str(" ", diff)
+end
+
+pub fn pad_left(s: string, width: int) -> string is
+    let diff: int = width - visible_len(s)
+    if diff <= 0 is return s end
+    return rep_str(" ", diff) + s
+end
+
+pub fn pad_center(s: string, width: int) -> string is
+    let diff: int = width - visible_len(s)
+    if diff <= 0 is return s end
+    let left: int = diff / 2
+    let right: int = diff - left
+    return rep_str(" ", left) + s + rep_str(" ", right)
+end
+
+;;@internal
+pub fn is_digit_ch(ch: string) -> bool is
+    return ch == "0" || ch == "1" || ch == "2" || ch == "3" || ch == "4" ||
+           ch == "5" || ch == "6" || ch == "7" || ch == "8" || ch == "9"
+end
+
+;;@internal
+pub fn is_all_digits(s: string) -> bool is
+    let n: int = s.len()
+    if n == 0 is return false end
+    let mut i: int = 0
+    while i < n is
+        if !is_digit_ch(s[i..i + 1]) is return false end
+        i = i + 1
+    end
+    return true
+end
+
+;;@internal
+pub fn hex_digit_val(ch: string) -> int is
+    if ch == "0" is return 0 end
+    if ch == "1" is return 1 end
+    if ch == "2" is return 2 end
+    if ch == "3" is return 3 end
+    if ch == "4" is return 4 end
+    if ch == "5" is return 5 end
+    if ch == "6" is return 6 end
+    if ch == "7" is return 7 end
+    if ch == "8" is return 8 end
+    if ch == "9" is return 9 end
+    if ch == "a" || ch == "A" is return 10 end
+    if ch == "b" || ch == "B" is return 11 end
+    if ch == "c" || ch == "C" is return 12 end
+    if ch == "d" || ch == "D" is return 13 end
+    if ch == "e" || ch == "E" is return 14 end
+    if ch == "f" || ch == "F" is return 15 end
+    return 0
+end
+
+;;@internal
+pub fn hex_pair_val(s: string, i: int) -> int is
+    return hex_digit_val(s[i..i + 1]) * 16 + hex_digit_val(s[i + 1..i + 2])
+end
+
+;; Two lowercase hex digits for 0..255 (clamped).
+;;@internal
+pub fn int_to_hex2(n: int) -> string is
+    let digits: string = "0123456789abcdef"
+    let v: int = clampi(n, 0, 255)
+    return digits[v / 16..v / 16 + 1] + digits[v % 16..v % 16 + 1]
+end
+
+;; Strip ANSI SGR escape sequences ("\x1b[...m") so width/padding math is
+;; done against what actually shows up on screen, not the byte count.
+pub fn strip_ansi(s: string) -> string is
+    let n: int = char_count(s)
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < n is
+        let ch: string = s[i..i + 1]
+        if ch == "\x1b" is
+            let mut j: int = i + 1
+            if j < n && s[j..j + 1] == "[" is
+                j = j + 1
+                while j < n && s[j..j + 1] != "m" is
+                    j = j + 1
+                end
+                if j < n is j = j + 1 end
+            end
+            i = j
+        else is
+            out = out + ch
+            i = i + 1
+        end
+    end
+    return out
+end
+
+;; Number of Unicode code points (terminal columns, for the non-wide characters this
+;; library draws). The C++ backend of h# 0.9.0 slices strings *by byte*, so
+;; `char_count` returns the byte length — which made every box-drawing character
+;; ("│" = 3 bytes) count as 3 columns. UTF-8 continuation bytes (0x80..0xBF)
+;; don't start a character, so skip them.
+;;@internal
+pub fn utf8_count(s: string) -> int is
+    let n: int = s.len()
+    let mut cnt: int = 0
+    let mut i: int = 0
+    while i < n is
+        let b: int = __builtin_str_to_char_code(s[i..i + 1])
+        if b < 128 || b >= 192 is cnt = cnt + 1 end
+        i = i + 1
+    end
+    return cnt
+end
+
+;; Display width of `s`: ANSI escapes ignored, UTF-8 code points counted.
+pub fn visible_len(s: string) -> int is
+    return utf8_count(strip_ansi(s))
+end
+
+;; The first `n` characters of `s` (UTF-8 aware; does not understand ANSI).
+pub fn utf8_take(s: string, n: int) -> string is
+    let total: int = char_count(s)
+    let mut i: int = 0
+    let mut cnt: int = 0
+    while i < total is
+        let b: int = __builtin_str_to_char_code(s[i..i + 1])
+        if b < 128 || b >= 192 is
+            if cnt == n is return s[0..i] end
+            cnt = cnt + 1
+        end
+        i = i + 1
+    end
+    return s
+end
+
+;; `s` without its first `n` characters (UTF-8 aware; does not understand ANSI).
+pub fn utf8_skip(s: string, n: int) -> string is
+    let total: int = char_count(s)
+    if n <= 0 is return s end
+    let mut i: int = 0
+    let mut cnt: int = 0
+    while i < total is
+        let b: int = __builtin_str_to_char_code(s[i..i + 1])
+        if b < 128 || b >= 192 is
+            if cnt == n is return s[i..total] end
+            cnt = cnt + 1
+        end
+        i = i + 1
+    end
+    return ""
+end
+
+;; Split `s` into its characters (one string per code point).
+pub fn utf8_chars(s: string) -> [string] is
+    let total: int = char_count(s)
+    let mut out: [string] = []
+    let mut start: int = 0
+    let mut i: int = 0
+    while i < total is
+        let b: int = __builtin_str_to_char_code(s[i..i + 1])
+        if (b < 128 || b >= 192) && i > start is
+            out.push(s[start..i])
+            start = i
+        end
+        i = i + 1
+    end
+    if total > start is out.push(s[start..total]) end
+    return out
+end
+
+;; Cut `s` to at most `width` columns, appending `tail` (e.g. "…") when something
+;; was cut. ANSI escapes are kept (and a reset is appended) but never counted.
+pub fn truncate_str(s: string, width: int, tail: string) -> string is
+    if width <= 0 is return "" end
+    if visible_len(s) <= width is return s end
+    let tail_w: int = visible_len(tail)
+    let limit: int = maxi(0, width - tail_w)
+    let total: int = char_count(s)
+    let mut out: string = ""
+    let mut cnt: int = 0
+    let mut i: int = 0
+    let mut saw_esc: bool = false
+    while i < total is
+        let ch: string = s[i..i + 1]
+        if ch == "\x1b" is
+            saw_esc = true
+            let mut j: int = i + 1
+            if j < total && s[j..j + 1] == "[" is
+                j = j + 1
+                while j < total && s[j..j + 1] != "m" is
+                    j = j + 1
+                end
+                if j < total is j = j + 1 end
+            end
+            out = out + s[i..j]
+            i = j
+        else is
+            let b: int = __builtin_str_to_char_code(ch)
+            if b < 128 || b >= 192 is
+                if cnt >= limit is break end
+                cnt = cnt + 1
+            end
+            out = out + ch
+            i = i + 1
+        end
+    end
+    if saw_esc is out = out + "\x1b[0m" end
+    return out + tail
+end
+
+;; Greedy word wrap to `width` columns. Words longer than a whole line are cut
+;; hard. Plain text only — a wrapped line never carries styling across lines.
+pub fn wrap_text(s: string, width: int) -> string is
+    if width <= 0 is return s end
+    let src: [string] = str_split(s, "\n")
+    let mut out: [string] = []
+    for line in src is
+        if visible_len(line) <= width is
+            out.push(line)
+        else is
+            let words: [string] = str_split(line, " ")
+            let mut cur: string = ""
+            let mut cur_w: int = 0
+            for word in words is
+                let mut w: string = word
+                let mut ww: int = visible_len(w)
+                while ww > width is
+                    if cur != "" is
+                        out.push(cur)
+                        cur = ""
+                        cur_w = 0
+                    end
+                    out.push(utf8_take(w, width))
+                    w = utf8_skip(w, width)
+                    ww = visible_len(w)
+                end
+                if cur == "" is
+                    cur = w
+                    cur_w = ww
+                elsif cur_w + 1 + ww <= width is
+                    cur = cur + " " + w
+                    cur_w = cur_w + 1 + ww
+                else is
+                    out.push(cur)
+                    cur = w
+                    cur_w = ww
+                end
+            end
+            out.push(cur)
+        end
+    end
+    return iter_join(out, "\n")
+end
+
+;; ASCII-only lowercase (used for case-insensitive filtering).
+pub fn lower_ascii(s: string) -> string is
+    let upper: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    let lower: string = "abcdefghijklmnopqrstuvwxyz"
+    let n: int = char_count(s)
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < n is
+        let ch: string = s[i..i + 1]
+        let mut r: string = ch
+        let mut k: int = 0
+        while k < 26 is
+            if upper[k..k + 1] == ch is
+                r = lower[k..k + 1]
+                break
+            end
+            k = k + 1
+        end
+        out = out + r
+        i = i + 1
+    end
+    return out
+end
+
+;; True when `needle` occurs in `hay` (case-sensitive; empty needle always matches).
+pub fn contains_text(hay: string, needle: string) -> bool is
+    let nl: int = char_count(needle)
+    if nl == 0 is return true end
+    let hl: int = char_count(hay)
+    let mut i: int = 0
+    while i + nl <= hl is
+        if hay[i..i + nl] == needle is return true end
+        i = i + 1
+    end
+    return false
+end
+
+;; True when `s` starts with `prefix`.
+pub fn starts_with_text(s: string, prefix: string) -> bool is
+    let pl: int = char_count(prefix)
+    if char_count(s) < pl is return false end
+    return s[0..pl] == prefix
+end
