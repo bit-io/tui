@@ -1,0 +1,242 @@
+fn read_codes(count: int) -> [int] is
+    let cmd: string = "dd if=/dev/tty bs=1 count=" + to_string(count) + " 2>/dev/null | od -An -v -tu1 | tr -s ' \\n' ' '"
+    return parse_codes(__builtin_process_run(cmd))
+end
+
+;; Whatever bytes are available in a single read(2) (up to 32) — used for the rest of
+;; an escape sequence, which the terminal sends in one burst.
+fn read_chunk() -> [int] is
+    let cmd: string = "dd if=/dev/tty bs=32 count=1 2>/dev/null | od -An -v -tu1 | tr -s ' \\n' ' '"
+    return parse_codes(__builtin_process_run(cmd))
+end
+
+fn parse_codes(raw: string) -> [int] is
+    let mut out: [int] = []
+    let pieces: [string] = str_split(raw, " ")
+    for part in pieces is
+        let t: string = tl_text::trim_str(part)
+        if t != "" && tl_text::is_all_digits(t) is out.push(__builtin_conv_str_to_int(t)) end
+    end
+    return out
+end
+
+;; One ASCII character from its code (32..126); "" for anything else.
+fn ascii_char(code: int) -> string is
+    if code < 32 || code > 126 is return "" end
+    let table: string = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    return table[code - 32..code - 31]
+end
+
+;; Three-digit octal of a byte, for `printf '\ooo'`.
+fn oct3(n: int) -> string is
+    let digits: string = "01234567"
+    return digits[(n / 64) % 8..(n / 64) % 8 + 1] + digits[(n / 8) % 8..(n / 8) % 8 + 1] + digits[n % 8..n % 8 + 1]
+end
+
+;; The real characters for a run of UTF-8 bytes (shell `printf` rebuilds them
+;; faithfully, so "ą", "ł", "€" and emoji come through as typed).
+fn bytes_to_text(codes: [int]) -> string is
+    let mut fmt: string = ""
+    for c in codes is fmt = fmt + "\\" + oct3(c) end
+    let out: string = __builtin_process_run("printf '" + fmt + "'")
+    if out == "" is return "?" end
+    return out
+end
+
+;; Name of a CSI/SS3 key from its final byte (and first numeric parameter).
+fn csi_base_name(fin: string, first: int) -> string is
+    if fin == "A" is return "up" end
+    if fin == "B" is return "down" end
+    if fin == "C" is return "right" end
+    if fin == "D" is return "left" end
+    if fin == "H" is return "home" end
+    if fin == "F" is return "end" end
+    if fin == "Z" is return "shift+tab" end
+    if fin == "P" is return "f1" end
+    if fin == "Q" is return "f2" end
+    if fin == "R" is return "f3" end
+    if fin == "S" is return "f4" end
+    if fin == "~" is
+        if first == 1 || first == 7 is return "home" end
+        if first == 2 is return "insert" end
+        if first == 3 is return "delete" end
+        if first == 4 || first == 8 is return "end" end
+        if first == 5 is return "pgup" end
+        if first == 6 is return "pgdown" end
+        if first == 11 is return "f1" end
+        if first == 12 is return "f2" end
+        if first == 13 is return "f3" end
+        if first == 14 is return "f4" end
+        if first == 15 is return "f5" end
+        if first == 17 is return "f6" end
+        if first == 18 is return "f7" end
+        if first == 19 is return "f8" end
+        if first == 20 is return "f9" end
+        if first == 21 is return "f10" end
+        if first == 23 is return "f11" end
+        if first == 24 is return "f12" end
+    end
+    return ""
+end
+
+;; xterm modifier parameter: 2 shift, 3 alt, 4 alt+shift, 5 ctrl, 6 ctrl+shift, 7 ctrl+alt.
+fn csi_with_mod(base: string, m: int) -> string is
+    if base == "shift+tab" is return base end
+    if m == 2 is return "shift+" + base end
+    if m == 3 is return "alt+" + base end
+    if m == 4 is return "alt+shift+" + base end
+    if m == 5 is return "ctrl+" + base end
+    if m == 6 is return "ctrl+shift+" + base end
+    if m == 7 is return "ctrl+alt+" + base end
+    return base
+end
+
+;; SGR mouse report: params "<b;x;y", final "M" (press/drag) or "m" (release).
+fn decode_mouse(params: string, fin: string) -> string is
+    let body: string = params[1..char_count(params)]
+    let parts: [string] = str_split(body, ";")
+    if parts.len() < 3 is return "esc" end
+    let b: int = __builtin_conv_str_to_int(parts[0])
+    let mut button: string = "none"
+    let mut action: string = "press"
+    if b >= 64 is
+        if b % 2 == 0 is
+            button = "wheel_up"
+        else is
+            button = "wheel_down"
+        end
+    else is
+        let low: int = b % 4
+        if low == 0 is button = "left" end
+        if low == 1 is button = "middle" end
+        if low == 2 is button = "right" end
+        if b >= 32 is action = "drag" end
+        if fin == "m" is action = "release" end
+    end
+    return "mouse:" + button + ":" + action + ":" + parts[1] + ":" + parts[2]
+end
+
+fn decode_csi(seq: string) -> string is
+    let n: int = tl_text::char_count(seq)
+    if n == 0 is return "esc" end
+    let fin: string = seq[n - 1..n]
+    let params: string = seq[0..n - 1]
+    if params != "" && params[0..1] == "<" is
+        return decode_mouse(params, fin)
+    end
+    let parts: [string] = str_split(params, ";")
+    let mut first: int = 0
+    if parts.len() >= 1 && parts[0] != "" && tl_text::is_all_digits(parts[0]) is
+        first = __builtin_conv_str_to_int(parts[0])
+    end
+    let mut modn: int = 1
+    if parts.len() >= 2 && parts[1] != "" && tl_text::is_all_digits(parts[1]) is
+        modn = __builtin_conv_str_to_int(parts[1])
+    end
+    let base: string = csi_base_name(fin, first)
+    if base == "" is return "esc" end
+    return csi_with_mod(base, modn)
+end
+
+fn ctrl_key_name(code: int) -> string is
+    if code < 1 || code > 26 is return "" end
+    let letters: string = "abcdefghijklmnopqrstuvwxyz"
+    return "ctrl+" + letters[code - 1..code]
+end
+
+fn utf8_extra_bytes(code: int) -> int is
+    if code >= 240 is return 3 end
+    if code >= 224 is return 2 end
+    if code >= 192 is return 1 end
+    return 0
+end
+
+;; Decode what follows an ESC byte (`rest` is empty for a lone Escape press).
+fn decode_escape(rest: [int]) -> string is
+    if rest.len() == 0 is return "esc" end
+    let c2: int = rest[0]
+    if c2 == 91 is
+        ;; CSI: "[" + parameter bytes + one final byte (0x40..0x7E)
+        let mut seq: string = ""
+        let mut i: int = 1
+        while i < rest.len() is
+            let ch: string = ascii_char(rest[i])
+            seq = seq + ch
+            if rest[i] >= 64 && rest[i] <= 126 is break end
+            i = i + 1
+        end
+        return decode_csi(seq)
+    end
+    if c2 == 79 is
+        if rest.len() < 2 is return "esc" end
+        let name: string = csi_base_name(ascii_char(rest[1]), 0)
+        if name == "" is return "esc" end
+        return name
+    end
+    if c2 == 127 is return "alt+backspace" end
+    if c2 == 32 is return "alt+space" end
+    if c2 > 32 && c2 < 127 is return "alt+" + ascii_char(c2) end
+    return "esc"
+end
+
+;; Try to read one key. Returns "" after ~100 ms if nothing was pressed, and the
+;; parsed key name otherwise. This is the non-blocking poll `run`'s main loop uses.
+pub fn poll_key() -> string is
+    let first: [int] = read_codes(1)
+    if first.len() == 0 is return "" end
+    let b: int = first[0]
+    if b == 27 is return decode_escape(read_chunk()) end
+    if b == 13 || b == 10 is return "enter" end
+    if b == 9 is return "tab" end
+    if b == 127 || b == 8 is return "backspace" end
+    if b == 32 is return "space" end
+    let ctrl: string = ctrl_key_name(b)
+    if ctrl != "" is return ctrl end
+    if b >= 33 && b <= 126 is return ascii_char(b) end
+
+    ;; Multi-byte UTF-8 (e.g. "ą", "ł", "€", an emoji): read the continuation bytes
+    ;; and rebuild the character, so one physical keypress is one `poll_key()`
+    ;; result carrying the real text.
+    let extra: int = utf8_extra_bytes(b)
+    if extra > 0 is
+        let more: [int] = read_codes(extra)
+        let mut all: [int] = []
+        all.push(b)
+        for m in more is all.push(m) end
+        return bytes_to_text(all)
+    end
+    return ""
+end
+
+fn is_function_key(key: string) -> bool is
+    let names: [string] = ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"]
+    for n in names is
+        if key == n is return true end
+    end
+    return false
+end
+
+;; True for every key name `poll_key` produces that ISN'T a plain
+;; printable character — used by `textinput_update` (and useful in your
+;; own `update`) to tell "the user typed a letter" apart from "the user
+;; pressed a named/control key".
+pub fn is_special_key(key: string) -> bool is
+    if key == "up" || key == "down" || key == "left" || key == "right" is return true end
+    if key == "home" || key == "end" || key == "pgup" || key == "pgdown" is return true end
+    if key == "delete" || key == "insert" || key == "backspace" || key == "tab" || key == "enter" is return true end
+    if key == "esc" || key == "space" is return true end
+    if tl_text::starts_with_text(key, "ctrl+") || tl_text::starts_with_text(key, "alt+") || tl_text::starts_with_text(key, "shift+") is return true end
+    if tl_text::starts_with_text(key, "mouse:") is return true end
+    if is_function_key(key) is return true end
+    return false
+end
+
+;; Block until a key is pressed (bypasses the ~100ms poll window). Handy
+;; for a one-off "press any key to continue" prompt outside the main
+;; `run` loop. Leaves raw mode exactly as it found it.
+pub fn read_key_blocking() -> string is
+    let _r: string = __builtin_process_run("stty min 1 time 0 -F /dev/tty 2>/dev/null")
+    let key: string = poll_key()
+    let _r2: string = __builtin_process_run("stty min 0 time 1 -F /dev/tty 2>/dev/null")
+    return key
+end
