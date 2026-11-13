@@ -1,0 +1,221 @@
+struct Msg is
+    pub kind: string     ;; "key" | "tick" | "resize" | "quit" | "none" | "custom" | "mouse"
+    pub key: string      ;; key name; for "mouse": the button ("left" "middle" "right" "wheel_up" "wheel_down" "none")
+    pub width: int
+    pub height: int
+    pub data: string     ;; custom payload; for "mouse": the action ("press" "release" "drag")
+    pub x: int           ;; mouse column (1-based)
+    pub y: int           ;; mouse row (1-based)
+end
+
+pub fn key_msg(key: string) -> any is
+    return Msg { kind: "key", key: key, width: 0, height: 0, data: "", x: 0, y: 0 }
+end
+
+pub fn tick_msg(width: int, height: int) -> any is
+    return Msg { kind: "tick", key: "", width: width, height: height, data: "", x: 0, y: 0 }
+end
+
+pub fn resize_msg(width: int, height: int) -> any is
+    return Msg { kind: "resize", key: "", width: width, height: height, data: "", x: 0, y: 0 }
+end
+
+;; A mouse event. `button`: "left" "middle" "right" "wheel_up" "wheel_down" "none";
+;; `action`: "press" "release" "drag"; `x`/`y` are 1-based terminal cells.
+pub fn mouse_msg(button: string, action: string, x: int, y: int) -> any is
+    return Msg { kind: "mouse", key: button, width: 0, height: 0, data: action, x: x, y: y }
+end
+
+;;@internal
+pub fn internal_quit_msg() -> any is
+    return Msg { kind: "quit", key: "", width: 0, height: 0, data: "", x: 0, y: 0 }
+end
+
+pub fn quit_msg() -> any is
+    return internal_quit_msg()
+end
+
+pub fn none_msg() -> any is
+    return Msg { kind: "none", key: "", width: 0, height: 0, data: "", x: 0, y: 0 }
+end
+
+pub fn custom_msg(data: string) -> any is
+    return Msg { kind: "custom", key: "", width: 0, height: 0, data: data, x: 0, y: 0 }
+end
+
+pub fn msg_kind(m_any: any) -> string is
+    let m: Msg = m_any
+    return m.kind
+end
+
+pub fn msg_key(m_any: any) -> string is
+    let m: Msg = m_any
+    return m.key
+end
+
+pub fn msg_data(m_any: any) -> string is
+    let m: Msg = m_any
+    return m.data
+end
+
+pub fn msg_width(m_any: any) -> int is
+    let m: Msg = m_any
+    return m.width
+end
+
+pub fn msg_height(m_any: any) -> int is
+    let m: Msg = m_any
+    return m.height
+end
+
+;; Mouse column / row (1-based); 0 for non-mouse messages.
+pub fn msg_x(m_any: any) -> int is
+    let m: Msg = m_any
+    return m.x
+end
+
+pub fn msg_y(m_any: any) -> int is
+    let m: Msg = m_any
+    return m.y
+end
+
+;; Mouse button of a mouse message ("" for other messages).
+pub fn msg_mouse_button(m_any: any) -> string is
+    let m: Msg = m_any
+    if m.kind != "mouse" is return "" end
+    return m.key
+end
+
+;; Mouse action of a mouse message: "press" "release" "drag" ("" for other messages).
+pub fn msg_mouse_action(m_any: any) -> string is
+    let m: Msg = m_any
+    if m.kind != "mouse" is return "" end
+    return m.data
+end
+
+pub fn msg_is(m_any: any, kind: string) -> bool is
+    let m: Msg = m_any
+    return m.kind == kind
+end
+
+pub fn msg_is_key(m_any: any, key: string) -> bool is
+    let m: Msg = m_any
+    return m.kind == "key" && m.key == key
+end
+
+pub fn msg_is_any_key(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "key"
+end
+
+;; True when the message is a key message whose key is one of `keys`.
+pub fn msg_is_key_in(m_any: any, keys: [string]) -> bool is
+    let m: Msg = m_any
+    if m.kind != "key" is return false end
+    for k in keys is
+        if m.key == k is return true end
+    end
+    return false
+end
+
+pub fn msg_is_tick(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "tick"
+end
+
+pub fn msg_is_resize(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "resize"
+end
+
+pub fn msg_is_quit(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "quit"
+end
+
+pub fn msg_is_custom(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "custom"
+end
+
+pub fn msg_is_mouse(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "mouse"
+end
+
+;; A left-button press.
+pub fn msg_is_click(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "mouse" && m.key == "left" && m.data == "press"
+end
+
+pub fn msg_is_wheel_up(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "mouse" && m.key == "wheel_up"
+end
+
+pub fn msg_is_wheel_down(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "mouse" && m.key == "wheel_down"
+end
+
+;; True for ctrl+c.
+pub fn is_ctrl_c(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "key" && m.key == "ctrl+c"
+end
+
+;; True for the keys that conventionally mean "leave the screen": ctrl+c, "q" and
+;; "esc". Offer this to your own `update` as a *suggestion* — most real apps only
+;; want ctrl+c to be unconditional and want "q"/esc to behave differently
+;; depending on which screen/mode they're in (e.g. while typing into a textinput).
+pub fn should_quit(m_any: any) -> bool is
+    let m: Msg = m_any
+    return m.kind == "key" && (m.key == "ctrl+c" || m.key == "q" || m.key == "esc")
+end
+
+
+;; ── commands ─────────────────────────────────────────────────────────────
+;;
+;; A `Cmd` is a zero-argument closure returning the next `Msg`. `run`'s
+;; loop calls the `cmd` returned by `update` right away and feeds its
+;; result back into `update` (bounded — see `run`), the same shape as
+;; Bubble Tea's `Cmd -> Msg -> Update` cycle, just synchronous instead of
+;; running on a goroutine.
+
+pub fn cmd_none() -> fn() -> any is
+    return || -> any is
+        return none_msg()
+    end
+end
+
+pub fn cmd_quit() -> fn() -> any is
+    return || -> any is
+        return internal_quit_msg()
+    end
+end
+
+pub fn cmd_custom(data: string) -> fn() -> any is
+    return || -> any is
+        return custom_msg(data)
+    end
+end
+
+;; Sleeps `ms` milliseconds (blocking the render loop — there is no
+;; background timer in this synchronous engine) then produces a tick
+;; message. Useful for a deliberate delay between two update steps.
+pub fn cmd_tick(ms: int) -> fn() -> any is
+    return || -> any is
+        __builtin_time_sleep_ms(ms)
+        return tick_msg(0, 0)
+    end
+end
+
+;; Sleeps `ms` milliseconds, then produces a custom message carrying `data`
+;; (a delayed "toast expired" / "retry now" style message).
+pub fn cmd_delay(ms: int, data: string) -> fn() -> any is
+    return || -> any is
+        __builtin_time_sleep_ms(ms)
+        return custom_msg(data)
+    end
+end
