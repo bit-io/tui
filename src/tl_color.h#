@@ -1,0 +1,108 @@
+fn named_color_code(name: string, base: int) -> string is
+    ;; base is 30 for foreground, 40 for background
+    if name == "black" is return to_string(base + 0) end
+    if name == "red" is return to_string(base + 1) end
+    if name == "green" is return to_string(base + 2) end
+    if name == "yellow" is return to_string(base + 3) end
+    if name == "blue" is return to_string(base + 4) end
+    if name == "magenta" is return to_string(base + 5) end
+    if name == "cyan" is return to_string(base + 6) end
+    if name == "white" is return to_string(base + 7) end
+    if name == "bright_black" is return to_string(base + 60) end
+    if name == "bright_red" is return to_string(base + 61) end
+    if name == "bright_green" is return to_string(base + 62) end
+    if name == "bright_yellow" is return to_string(base + 63) end
+    if name == "bright_blue" is return to_string(base + 64) end
+    if name == "bright_magenta" is return to_string(base + 65) end
+    if name == "bright_cyan" is return to_string(base + 66) end
+    if name == "bright_white" is return to_string(base + 67) end
+    return ""
+end
+
+;; Build the SGR code for a foreground color (no leading "\x1b[" / no
+;; trailing "m" — callers combine several codes into one escape).
+;;@internal
+pub fn fg_code(color: string) -> string is
+    if color == "" is return "" end
+    if color[0..1] == "#" && color.len() == 7 is
+        let r: int = tl_text::hex_pair_val(color, 1)
+        let g: int = tl_text::hex_pair_val(color, 3)
+        let b: int = tl_text::hex_pair_val(color, 5)
+        return "38;2;" + to_string(r) + ";" + to_string(g) + ";" + to_string(b)
+    end
+    if tl_text::is_all_digits(color) is
+        return "38;5;" + color
+    end
+    let named: string = named_color_code(color, 30)
+    if named != "" is return named end
+    return ""
+end
+
+;;@internal
+pub fn bg_code(color: string) -> string is
+    if color == "" is return "" end
+    if color[0..1] == "#" && color.len() == 7 is
+        let r: int = tl_text::hex_pair_val(color, 1)
+        let g: int = tl_text::hex_pair_val(color, 3)
+        let b: int = tl_text::hex_pair_val(color, 5)
+        return "48;2;" + to_string(r) + ";" + to_string(g) + ";" + to_string(b)
+    end
+    if tl_text::is_all_digits(color) is
+        return "48;5;" + color
+    end
+    let named: string = named_color_code(color, 40)
+    if named != "" is return named end
+    return ""
+end
+
+;; Wrap `text` in a foreground-color escape. Handy for one-off coloring
+;; without building a whole `Style`.
+pub fn colorize(text: string, color: string) -> string is
+    let code: string = fg_code(color)
+    if code == "" is return text end
+    return "\x1b[" + code + "m" + text + "\x1b[0m"
+end
+
+;; Wrap `text` in a background-color escape.
+pub fn colorize_bg(text: string, color: string) -> string is
+    let code: string = bg_code(color)
+    if code == "" is return text end
+    return "\x1b[" + code + "m" + text + "\x1b[0m"
+end
+
+;; "#rrggbb" from three 0..255 channels (clamped).
+pub fn rgb_hex(r: int, g: int, b: int) -> string is
+    return "#" + tl_text::int_to_hex2(r) + tl_text::int_to_hex2(g) + tl_text::int_to_hex2(b)
+end
+
+fn lerp_channel(a: int, b: int, pct: int) -> int is
+    return a + ((b - a) * pct) / 100
+end
+
+;; Linear blend between two "#rrggbb" colors; `pct` 0 = `c1`, 100 = `c2`.
+;; Anything that is not a 7-character hex color yields `c1` unchanged.
+pub fn color_lerp(c1: string, c2: string, pct: int) -> string is
+    if c1.len() != 7 || c2.len() != 7 is return c1 end
+    if c1[0..1] != "#" || c2[0..1] != "#" is return c1 end
+    let p: int = tl_text::clampi(pct, 0, 100)
+    let r: int = lerp_channel(tl_text::hex_pair_val(c1, 1), tl_text::hex_pair_val(c2, 1), p)
+    let g: int = lerp_channel(tl_text::hex_pair_val(c1, 3), tl_text::hex_pair_val(c2, 3), p)
+    let b: int = lerp_channel(tl_text::hex_pair_val(c1, 5), tl_text::hex_pair_val(c2, 5), p)
+    return rgb_hex(r, g, b)
+end
+
+;; Color `text` one character at a time, blending `c1` -> `c2` (both "#rrggbb")
+;; across its length. Plain text only (existing escapes are stripped first).
+pub fn gradient(text: string, c1: string, c2: string) -> string is
+    let chars: [string] = tl_text::utf8_chars(tl_text::strip_ansi(text))
+    let n: int = chars.len()
+    if n == 0 is return "" end
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < n is
+        let pct: int = if n <= 1 is 0 else is (i * 100) / (n - 1) end
+        out = out + colorize(chars[i], color_lerp(c1, c2, pct))
+        i = i + 1
+    end
+    return out
+end
