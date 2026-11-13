@@ -1,0 +1,82 @@
+struct Tabs is
+    pub titles: [string]
+    pub active: int
+    pub active_style: any
+    pub inactive_style: any
+end
+
+fn tabs_make(titles: [string], active: int, active_style: any, inactive_style: any) -> any is
+    return Tabs { titles: titles, active: tl_text::clampi(active, 0, tl_text::maxi(0, titles.len() - 1)), active_style: active_style, inactive_style: inactive_style }
+end
+
+pub fn tabs_new(titles: [string]) -> any is
+    return tabs_make(titles, 0, tl_style::style_underline(tl_style::style_bold(tl_style::style_fg(tl_style::style_new(), "cyan"), true), true), tl_style::style_fg(tl_style::style_new(), "bright_black"))
+end
+
+pub fn tabs_active(t_any: any) -> int is
+    let t: Tabs = t_any
+    return t.active
+end
+
+;; Title of the active tab ("" when there are no tabs).
+pub fn tabs_active_title(t_any: any) -> string is
+    let t: Tabs = t_any
+    if t.titles.len() == 0 is return "" end
+    return t.titles[t.active]
+end
+
+pub fn tabs_set_active(t_any: any, index: int) -> any is
+    let t: Tabs = t_any
+    return tabs_make(t.titles, index, t.active_style, t.inactive_style)
+end
+
+pub fn tabs_set_styles(t_any: any, active_style: any, inactive_style: any) -> any is
+    let t: Tabs = t_any
+    return tabs_make(t.titles, t.active, active_style, inactive_style)
+end
+
+;; Next tab, wrapping around at the end.
+pub fn tabs_next(t_any: any) -> any is
+    let t: Tabs = t_any
+    let n: int = t.titles.len()
+    if n == 0 is return t end
+    return tabs_make(t.titles, (t.active + 1) % n, t.active_style, t.inactive_style)
+end
+
+;; Previous tab, wrapping around at the start.
+pub fn tabs_prev(t_any: any) -> any is
+    let t: Tabs = t_any
+    let n: int = t.titles.len()
+    if n == 0 is return t end
+    return tabs_make(t.titles, (t.active + n - 1) % n, t.active_style, t.inactive_style)
+end
+
+;; Keys: left/right (wrapping), tab / shift+tab, and the digits 1-9 (jump to that tab).
+pub fn tabs_update(t_any: any, msg_any: any) -> any is
+    let t: Tabs = t_any
+    if !tl_msg::msg_is_any_key(msg_any) is return t end
+    let key: string = tl_msg::msg_key(msg_any)
+    if key == "left" || key == "shift+tab" is return tabs_prev(t) end
+    if key == "right" || key == "tab" is return tabs_next(t) end
+    if tl_text::is_digit_ch(key) && key != "0" is
+        let idx: int = __builtin_conv_str_to_int(key) - 1
+        if idx < t.titles.len() is return tabs_set_active(t, idx) end
+    end
+    return t
+end
+
+;; One line: the tabs separated by a thin bar, the active one highlighted.
+pub fn tabs_view(t_any: any) -> string is
+    let t: Tabs = t_any
+    let mut parts: [string] = []
+    let mut i: int = 0
+    while i < t.titles.len() is
+        if i == t.active is
+            parts.push(tl_style::style_render(t.active_style, " " + t.titles[i] + " "))
+        else is
+            parts.push(tl_style::style_render(t.inactive_style, " " + t.titles[i] + " "))
+        end
+        i = i + 1
+    end
+    return iter_join(parts, tl_style::style_render(t.inactive_style, "│"))
+end
