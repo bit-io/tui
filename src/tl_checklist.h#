@@ -1,0 +1,145 @@
+struct Checklist is
+    pub items: [string]
+    pub checked: [bool]
+    pub cursor: int
+    pub top: int
+    pub height: int
+    pub style: any
+    pub selected_style: any
+end
+
+fn cl_make(items: [string], checked: [bool], cursor: int, top: int, height: int, style: any, selected_style: any) -> any is
+    return Checklist { items: items, checked: checked, cursor: cursor, top: top, height: height, style: style, selected_style: selected_style }
+end
+
+fn bools_filled(n: int, value: bool) -> [bool] is
+    let mut out: [bool] = []
+    let mut i: int = 0
+    while i < n is
+        out.push(value)
+        i = i + 1
+    end
+    return out
+end
+
+pub fn checklist_new(items: [string]) -> any is
+    return cl_make(items, bools_filled(items.len(), false), 0, 0, tl_text::mini(10, items.len()), tl_style::style_new(), tl_style::style_bold(tl_style::style_fg(tl_style::style_new(), "cyan"), true))
+end
+
+pub fn checklist_set_height(c_any: any, height: int) -> any is
+    let c: Checklist = c_any
+    return cl_make(c.items, c.checked, c.cursor, c.top, height, c.style, c.selected_style)
+end
+
+pub fn checklist_set_style(c_any: any, style: any, selected_style: any) -> any is
+    let c: Checklist = c_any
+    return cl_make(c.items, c.checked, c.cursor, c.top, c.height, style, selected_style)
+end
+
+fn cl_move(c_any: any, cursor: int) -> any is
+    let c: Checklist = c_any
+    let n: int = c.items.len()
+    let cur: int = tl_text::clampi(cursor, 0, tl_text::maxi(0, n - 1))
+    let mut top: int = c.top
+    if cur < top is top = cur end
+    if cur >= top + c.height is top = cur - c.height + 1 end
+    top = tl_text::clampi(top, 0, tl_text::maxi(0, n - c.height))
+    return cl_make(c.items, c.checked, cur, top, c.height, c.style, c.selected_style)
+end
+
+;; Set the checked state of item `index`.
+pub fn checklist_set_checked(c_any: any, index: int, on: bool) -> any is
+    let c: Checklist = c_any
+    let mut flags: [bool] = []
+    let mut i: int = 0
+    while i < c.checked.len() is
+        if i == index is flags.push(on) else is flags.push(c.checked[i]) end
+        i = i + 1
+    end
+    return cl_make(c.items, flags, c.cursor, c.top, c.height, c.style, c.selected_style)
+end
+
+;; Flip the checked state of item `index`.
+pub fn checklist_toggle(c_any: any, index: int) -> any is
+    let c: Checklist = c_any
+    if index < 0 || index >= c.checked.len() is return c end
+    return checklist_set_checked(c, index, !c.checked[index])
+end
+
+pub fn checklist_check_all(c_any: any, on: bool) -> any is
+    let c: Checklist = c_any
+    return cl_make(c.items, bools_filled(c.items.len(), on), c.cursor, c.top, c.height, c.style, c.selected_style)
+end
+
+pub fn checklist_is_checked(c_any: any, index: int) -> bool is
+    let c: Checklist = c_any
+    if index < 0 || index >= c.checked.len() is return false end
+    return c.checked[index]
+end
+
+;; The checked items, in list order.
+pub fn checklist_selected(c_any: any) -> [string] is
+    let c: Checklist = c_any
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < c.items.len() is
+        if c.checked[i] is out.push(c.items[i]) end
+        i = i + 1
+    end
+    return out
+end
+
+;; Indexes of the checked items, in list order.
+pub fn checklist_selected_indices(c_any: any) -> [int] is
+    let c: Checklist = c_any
+    let mut out: [int] = []
+    let mut i: int = 0
+    while i < c.items.len() is
+        if c.checked[i] is out.push(i) end
+        i = i + 1
+    end
+    return out
+end
+
+pub fn checklist_cursor(c_any: any) -> int is
+    let c: Checklist = c_any
+    return c.cursor
+end
+
+;; Keys: up, down, pgup, pgdown, home, end, space / x (toggle), a (check all), n (uncheck all).
+pub fn checklist_update(c_any: any, msg_any: any) -> any is
+    let c: Checklist = c_any
+    if tl_msg::msg_is_wheel_up(msg_any) is return cl_move(c, c.cursor - 1) end
+    if tl_msg::msg_is_wheel_down(msg_any) is return cl_move(c, c.cursor + 1) end
+    if !tl_msg::msg_is_any_key(msg_any) is return c end
+    let key: string = tl_msg::msg_key(msg_any)
+    if key == "up" is return cl_move(c, c.cursor - 1) end
+    if key == "down" is return cl_move(c, c.cursor + 1) end
+    if key == "pgup" is return cl_move(c, c.cursor - c.height) end
+    if key == "pgdown" is return cl_move(c, c.cursor + c.height) end
+    if key == "home" is return cl_move(c, 0) end
+    if key == "end" is return cl_move(c, c.items.len() - 1) end
+    if key == "space" || key == "x" is return checklist_toggle(c, c.cursor) end
+    if key == "a" is return checklist_check_all(c, true) end
+    if key == "n" is return checklist_check_all(c, false) end
+    return c
+end
+
+pub fn checklist_view(c_any: any) -> string is
+    let c: Checklist = c_any
+    let mut out: [string] = []
+    let n: int = c.items.len()
+    let mut i: int = c.top
+    let end_idx: int = tl_text::mini(n, c.top + c.height)
+    while i < end_idx is
+        let box: string = if c.checked[i] is "[x] " else is "[ ] " end
+        let line: string = box + c.items[i]
+        if i == c.cursor is
+            out.push(tl_style::style_render(c.selected_style, "› " + line))
+        else is
+            out.push("  " + line)
+        end
+        i = i + 1
+    end
+    return tl_style::style_render(c.style, iter_join(out, "\n"))
+end
