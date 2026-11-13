@@ -1,34 +1,29 @@
 # tui
 
-A [Bubble Tea](https://github.com/charmbracelet/bubbletea) / [Lip Gloss](https://github.com/charmbracelet/lipgloss)
--inspired terminal UI toolkit for **H#**, distributed as a `bytes` package.
+A [Bubble Tea](https://github.com/charmbracelet/bubbletea) / [Lip Gloss](https://github.com/charmbracelet/lipgloss) /
+[Bubbles](https://github.com/charmbracelet/bubbles)-inspired terminal UI toolkit for **H#**, distributed as a `bit` package.
 
-Model → Update → View, a synchronous "Cmd" pipeline, ANSI styling with padding/
-borders/alignment, and a handful of ready-made components (spinner, progress
-bar, text input, scrollable viewport, selectable list, paginator, help bar,
-timer). **100% H#** — there is no `extern` FFI block anywhere in this
-library.
+Model → Update → View, a synchronous "Cmd" pipeline, ANSI styling with padding / borders / margins / alignment,
+layout helpers, mouse + modifier-key input, and a set of ready-made components. **100% H#** — there is no `extern`
+FFI block anywhere in this library.
 
 ## Install
 
 ```
-bytes add tui
+bit add tui
 ```
-
-or copy this directory into your project and add it as a workspace member /
-local dependency — see `Bytes.hk`.
 
 ## Quick start
 
 ```h#
-use "bytes -> tui" from "tui"
+use "bit -> tui" from "tui"
 
 fn init() -> any is
     return tui::spinner_new("dot")
 end
 
-fn update(model: any, msg: any) -> any is
-    if tui::is_ctrl_c(msg) || tui::msg_is_key(msg, "q") is
+fn update(model: any, msg: any) -> (any, fn() -> any) is
+    if tui::should_quit(msg) is
         return (model, tui::cmd_quit())
     end
     if tui::msg_is_tick(msg) is
@@ -41,152 +36,112 @@ fn view(model: any) -> string is
     return tui::spinner_view(model) + " doing work... (press q to quit)"
 end
 
-tui::run(init, update, view)
+fn main() is
+    tui::run(init, update, view)
+end
 ```
 
-Run it with the interpreter — **not** the native/LLVM compiler (see
-"Why interpreter-only?" below):
+## Source layout
+
+`src/lib.h#` is the public face and is **generated** — it only contains thin `pub fn` wrappers. The code lives in
+small modules, one per concern:
+
+| module | contents |
+|---|---|
+| `tl_text` | width/padding, UTF-8 helpers, `truncate_str`, `wrap_text`, case-insensitive search |
+| `tl_term` | raw mode, alt screen, cursor, `draw`, mouse on/off, title |
+| `tl_keys` | key + mouse decoding (`poll_key`, `is_special_key`) |
+| `tl_msg` | `Msg`, message readers/predicates, commands (`cmd_*`) |
+| `tl_color` | colors, `colorize`, `gradient`, `color_lerp` |
+| `tl_style` | the `Style` box model (colors, attrs, size, align, padding, border, margin, wrap) |
+| `tl_layout` | `join_*`, `place`, `box_titled`, `statusbar`, `indent`, `hline` |
+| `tl_program` | `run`, `run_no_tick`, `run_with` + options |
+| `tl_spinner` `tl_progress` `tl_textinput` `tl_textarea` `tl_viewport` `tl_list` `tl_checklist` `tl_table` `tl_tabs` `tl_paginator` `tl_help` `tl_timer` `tl_confirm` `tl_chart` | components |
+
+Why a facade? H# has no re-exports: an item of `mod tl_x` is called `tl_x_<name>`, while a user writes `tui::<name>`
+(= `tui_<name>`). The wrappers keep every public name exactly as it was.
+
+Adding a function: write it as `pub fn` in the right module (put `;;@internal` on the line above for helpers that
+only other modules need), then
 
 ```
-h# preview main.h#
-# or, from inside a bytes project:
-bytes run
+python3 tools/gen_facade.py   # regenerate src/lib.h#
+python3 tools/check.py        # static checks (block balance, call resolution, arity, facade completeness)
 ```
-
-## Why interpreter-only?
-
-Reading a single keystroke without waiting for Enter needs a byte-at-a-time
-read from stdin. H#'s interpreter has a real primitive for that
-(`__builtin_io_read_char`, wrapped as `std/io.h#`'s `read_char()`), but there
-is still no LLVM/native-codegen implementation of it — `h# build` /
-`bytes build --release` will fail at compile time with a clear "not
-supported by the LLVM backend" error if a program reaches it, rather than
-silently misbehaving. This isn't a limitation `tui` invented — it's the
-current state of the H# toolchain itself — so build/run any `tui` program
-through `h# preview` / `bytes run` (the interpreter/JIT path).
-
-Raw terminal mode (no line-buffering, no local echo) is switched on with the
-`stty` utility, shelled out to exactly the way `std/term.h#` already does to
-read the terminal's size — this is *not* the `extern` FFI feature, it's a
-plain subprocess call through the same process builtins the standard library
-itself uses.
-
-## A note on types
-
-Every public function that hands you back one of this library's own values
-(a message, a `Style`, a `Spinner`, ...) types it as `any`, and every example
-in this README does too — `let sp = tui::spinner_new("dot")`, never
-`let sp: Spinner = ...`. This isn't a style nitpick: when H# pulls in a
-package with `use "bytes -> tui" from "..."` it mangles that package's type
-names with the alias you chose, so there's no single fixed spelling of e.g.
-`Spinner` for your code to name safely. Field access (`msg.kind`) and this
-library's accessor functions (`tui::msg_key(msg)`, `tui::spinner_view(sp)`,
-...) work fine regardless — that's how every example here reads a value back
-out, exactly the pattern `std/sync.h#`'s `Mutex` and `Channel` already use.
 
 ## API overview
 
-**Terminal control** — `term_width()` `term_height()` `term_size()`
-`enable_raw_mode()` `disable_raw_mode(saved)` `enter_alt_screen()`
-`exit_alt_screen()` `hide_cursor()` `show_cursor()` `clear_screen()`
-`move_home()` `move_to(row, col)` `bell()` `set_title(t)` `draw(frame)`
+**Program loop** — `run(init, update, view)` (idle tick every ~80 ms), `run_no_tick(...)` (blocks for keys), and
+`run_with(init, update, view, opts)` with `options_new()` `options_tick_ms(o, ms)` `options_mouse(o, on)`
+`options_alt_screen(o, on)` `options_hide_cursor(o, on)` `options_title(o, t)`. `update` first receives one
+`resize` message with the terminal size, and another whenever the size changes. ctrl+c always quits.
 
-**Keyboard** — `poll_key()` (non-blocking, ~100ms), `read_key_blocking()`,
-`is_special_key(key)`. Key names: `"up" "down" "left" "right" "home" "end"
-"pgup" "pgdown" "delete" "backspace" "tab" "enter" "esc" "space" "ctrl+c"
-"ctrl+a" "ctrl+e" "ctrl+d" "ctrl+u" "ctrl+k" "ctrl+w"`, or a literal
-character. **Verified against a real build of the H# interpreter** (see
-"Verified against a real build" below): ASCII keys — letters, digits,
-punctuation, arrows, enter, backspace, tab, ctrl+combos — all read back
-correctly. Non-ASCII keys (Polish `ą ę ś ć ł ż źn`, emoji, ...) are still
-grouped into one `poll_key()` event each rather than splintering into
-several confusing fragments, but the character *value* comes through
-corrupted — this is a bug in the H# interpreter's own `__builtin_io_read_char`
-(it round-trips each raw byte through Rust's `char`, which is lossy for
-anything ≥ 128), not something fixable from library code. Practically:
-typing plain ASCII text into `textinput` works correctly; typing e.g. "ą"
-does not insert "ą".
+**Messages** — `key_msg` `tick_msg` `resize_msg` `mouse_msg` `quit_msg` `none_msg` `custom_msg`; readers `msg_kind`
+`msg_key` `msg_data` `msg_width` `msg_height` `msg_x` `msg_y` `msg_mouse_button` `msg_mouse_action`; predicates
+`msg_is` `msg_is_key` `msg_is_key_in` `msg_is_any_key` `msg_is_tick` `msg_is_resize` `msg_is_quit` `msg_is_custom`
+`msg_is_mouse` `msg_is_click` `msg_is_wheel_up` `msg_is_wheel_down` `is_ctrl_c` `should_quit`.
 
-**Messages** — `key_msg` `tick_msg` `resize_msg` `quit_msg` `none_msg`
-`custom_msg`, and readers `msg_kind` `msg_key` `msg_data` `msg_width`
-`msg_height`, and predicates `msg_is` `msg_is_key` `msg_is_any_key`
-`msg_is_tick` `msg_is_resize` `msg_is_quit` `msg_is_custom` `is_ctrl_c`.
+**Commands** — `cmd_none()` `cmd_quit()` `cmd_custom(data)` `cmd_tick(ms)` `cmd_delay(ms, data)`, or your own
+zero-argument closure returning a message.
 
-**Commands** — `cmd_none()` `cmd_quit()` `cmd_custom(data)` `cmd_tick(ms)`,
-or write your own zero-argument closure returning a message.
+**Keys** — `"up" "down" "left" "right" "home" "end" "pgup" "pgdown" "insert" "delete" "backspace" "tab"
+"shift+tab" "enter" "esc" "space" "f1".."f12" "ctrl+a".."ctrl+z"`, `"alt+<key>"`, `"ctrl|alt|shift+<arrow>"`, or the
+character itself (including `ą ę ś …`). Mouse (after `options_mouse`): clicks, drags and the wheel.
 
-**The program loop** — `run(init, update, view)` (idle-tick every ~100ms so
-animations keep moving) and `run_no_tick(init, update, view)` (blocks for a
-keypress instead, for static screens). Both return the final model when the
-program quits, and both bail out on Ctrl+C unconditionally so a broken
-`update` can never strand your terminal in raw mode.
+**Style** — `style_new()` and `style_fg/bg/bold/italic/underline/faint/strikethrough/reverse/width/height/max_width/
+align/valign/padding/margin/border/border_color/wrap`, fluent `.with_*(...)` + `.render(text)`, `style_render`.
+Borders: `none normal rounded thick double ascii hidden`. Colors: `""`, `"#rrggbb"`, a 256-palette index, or a name
+(`red`, `bright_cyan`, …); `colorize` `colorize_bg` `gradient` `color_lerp` `rgb_hex`.
 
-**Color & style** — `colorize(text, color)`, and the `Style` box model:
-`style_new()` and `style_fg/bg/bold/italic/underline/width/align/padding/
-border/border_color(...)` (each returns a modified copy), fluent sugar
-`.with_fg(...)` etc. + `.render(text)`, and the plain function
-`style_render(style, text)`. Colors: `""`, `"#rrggbb"`, an ANSI 256 index as
-a decimal string, or a name (`black red green yellow blue magenta cyan
-white`, and `bright_*` variants). Borders: `"none" "normal" "rounded"
-"thick" "double"`.
+**Layout** — `join_horizontal(blocks, gap)` `join_horizontal_align(blocks, gap, valign)` `join_vertical`
+`join_vertical_align` `place` `center_block` `box_titled` `statusbar` `indent` `hline` `block_width` `block_height`;
+text helpers `visible_len` `pad_left/right/center` `truncate_str` `wrap_text` `strip_ansi` `utf8_take/skip/chars`.
 
-**Layout** — `join_horizontal(blocks, gap)`, `join_vertical(blocks)`,
-`center_block(s, width, height)`.
+**Components**
 
-**Components** — `spinner_*` (kinds: `dot line circle arrow bounce pulse
-bar`), `progress_*`, `textinput_*`, `viewport_*`, `list_*` (as `ListModel`),
-`paginator_*`, `help_view(keys, descriptions)`, `timer_*`
-(start/stop/reset/elapsed/`mm:ss` view).
+| component | functions |
+|---|---|
+| spinner | `spinner_new(kind)` `spinner_custom` `spinner_kinds` `spinner_tick` `spinner_view` … (11 kinds) |
+| progress | `progress_new` `_set` `_incr` `_set_width` `_set_chars` `_show_percent` `_set_gradient` `_view` |
+| textinput | prompt, password echo, char limit, scrolling width, word jumps, `ctrl+w/k/u` |
+| textarea | multi-line editor with line numbers, placeholder, scrolling |
+| viewport | scroll by line/page/half page, vim keys, mouse wheel, `viewport_scroll_percent` |
+| list | selection, wrap-around, case-insensitive filter (`list_set_filter`), wheel |
+| checklist | multi-select with `space` / `a` / `n`, `checklist_selected[_indices]` |
+| table | headers, fixed or auto column widths, selectable row, scrolling |
+| tabs | `←/→`, `tab`, digits `1-9` |
+| paginator | dots, `paginator_view_text`, `pages_for`, `page_bounds` |
+| help | `help_view`, `help_view_width` (wraps) |
+| confirm | yes/no prompt, `y` / `n` / `enter` |
+| timer | stopwatch and countdown (`timer_new_countdown`, `timer_done`, `format_duration_ms`) |
+| charts | `sparkline`, `bar_chart` |
 
-See `examples/` for three complete programs: a spinner, a text-input form,
-and a small styled dashboard combining several components.
+See `examples/` for six complete programs (spinner, text input, dashboard, tabs+table+charts+mouse, multi-step
+form, text editor) and `tests/tui_test.h#` for tests of the pure functions.
 
-## Verified against a real build
+## A note on types
 
-Earlier drafts of this library were checked only by reading H#'s own
-compiler/interpreter source (module resolution, the builtin dispatch table,
-string/slice semantics) — no locally built `h#` binary, since the full
-toolchain needs LLVM 21. That's since been improved: `hsharp-parser` and
-`hsharp-interpreter` (the two crates that don't need LLVM — that's only
-`hsharp-compiler`'s native/AOT backend) build fine with plain `rustc`/`cargo`
-1.75, so every function in `src/lib.h#` has now actually been **parsed and
-executed** against a real build of the interpreter, including feeding raw
-bytes through `poll_key()` for arrow keys / enter / backspace / ctrl+c /
-tab / space / a plain letter. 44 checks, 0 failures. That process caught
-three real bugs, two in this library (now fixed) and one in H# itself:
+Every public function that hands you back one of this library's own values (a message, a `Style`, a `Spinner`, …)
+types it as `any`, and so do the examples — `let sp = tui::spinner_new("dot")`, never `let sp: Spinner = ...`.
+H# mangles a package's type names with the alias you chose, so there is no single fixed spelling for your code to
+name. Field access and the accessor functions (`tui::msg_key(msg)`, …) work regardless.
 
-- **Fixed** — a bare top-level statement like `tui::run(init, update, view)`
-  is not valid H#; only `fn`/`struct`/`enum`/`trait`/`impl`/`type`/`const`/
-  `mod`/`extern`/`use` are allowed at the top level (confirmed straight from
-  the parser). All three `examples/` now correctly wrap that call in
-  `fn main() is ... end`, since `run_module` specifically looks for and
-  calls a function named `main`.
-- **Not a bug, but worth knowing** — H# doesn't support chaining a call
-  directly onto another call's result, i.e. `some_fn()()` doesn't do what
-  it looks like it does. Store the intermediate result first:
-  `let cmd = some_fn()` then `cmd()`. `run`/`run_no_tick` already do this
-  correctly; if you write your own `Cmd`-calling code, do the same.
-- **An H# interpreter bug, not this library's** — see the UTF-8 caveat
-  under "Keyboard" above; `__builtin_io_read_char` mis-encodes any raw byte
-  ≥ 128, which corrupts non-ASCII key input at the source.
+## How keys are read (and why not `getchar`)
 
-## Other honest limitations
+`__builtin_io_read_char` is `getchar()`. In raw mode with a read timeout (`stty min 0 time 1`) the first idle read
+returns zero bytes, which stdio treats as **end of file — and EOF is sticky**: every later `getchar()` returns at
+once and never sees a key, so arrows, `q` and ctrl+c are dead while the loop spins. `tui` therefore reads keys
+straight from `/dev/tty` with `dd` (one short-lived child per poll, honouring the raw-mode timeout), decodes the
+bytes itself, and rebuilds multi-byte characters with `printf`. This also means non-ASCII input now arrives intact.
+Requirements: a POSIX shell with `dd`, `od`, `tr`, `printf` and `stty` (coreutils) and a real tty.
 
-- `style_render`/the components don't reflow long lines to fit a given
-  width — they pad short lines and leave long ones as-is.
-- `run`'s redraw does a full-screen clear every frame rather than diffing
-  against the previous frame, so fast repaints may flicker on some
-  terminals. Good enough for a first version; a future one could track the
-  previous frame and only rewrite changed lines.
-- `Cmd`s run synchronously on the render thread (H# only has real
-  concurrency for shell/HTTP tasks today, not arbitrary user closures) — a
-  slow `cmd` will visibly pause the UI. `cmd_tick` documents this; keep
-  your own `Cmd`s fast.
-- The interactive `run`/`run_no_tick` loop itself (the part that needs a
-  real tty: raw mode, the render/redraw cycle, live key polling) could not
-  be exercised end-to-end in the sandboxed environment this was built in
-  (no real terminal to attach). Every pure function it's built from has
-  been verified directly (see above); the loop that wires them together is
-  short and was re-read carefully, but hasn't been watched running on a
-  real screen. Please try the examples and report back if anything looks
-  off.
+## Honest limitations
+
+- Run programs through the C++/native build or `h# preview`; the loop needs a real terminal (`/dev/tty`).
+- Idle polling costs one tiny child process per poll (~10 per second); the frame is only redrawn when it changed.
+- Text-input / text-area cursors count ASCII characters; the *view* is UTF-8 safe.
+- `style_render` word-wraps only with `style_wrap(true)` + a width; otherwise long lines are left as they are.
+- Cmds run synchronously on the render thread — keep them fast.
+- This version was checked statically (`tools/check.py`) and the key-reading pipeline was tested on a real pty; the
+  H# sources themselves could not be compiled in the sandbox it was written in (no h# toolchain). Please build the
+  examples and the tests and report anything the compiler objects to.
