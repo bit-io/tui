@@ -1,0 +1,174 @@
+struct Options is
+    pub alt_screen: bool
+    pub hide_cursor: bool
+    pub mouse: bool
+    pub tick_ms: int        ;; idle tick length in ms; 0 = no ticks, block for keys
+    pub title: string
+end
+
+;; Defaults: alternate screen, hidden cursor, no mouse, 80 ms idle tick, no title.
+pub fn options_new() -> any is
+    return Options { alt_screen: true, hide_cursor: true, mouse: false, tick_ms: 80, title: "" }
+end
+
+pub fn options_alt_screen(o_any: any, on: bool) -> any is
+    let o: Options = o_any
+    return Options { alt_screen: on, hide_cursor: o.hide_cursor, mouse: o.mouse, tick_ms: o.tick_ms, title: o.title }
+end
+
+pub fn options_hide_cursor(o_any: any, on: bool) -> any is
+    let o: Options = o_any
+    return Options { alt_screen: o.alt_screen, hide_cursor: on, mouse: o.mouse, tick_ms: o.tick_ms, title: o.title }
+end
+
+;; Report mouse events (clicks, drags, wheel) as mouse messages.
+pub fn options_mouse(o_any: any, on: bool) -> any is
+    let o: Options = o_any
+    return Options { alt_screen: o.alt_screen, hide_cursor: o.hide_cursor, mouse: on, tick_ms: o.tick_ms, title: o.title }
+end
+
+;; Idle tick length in milliseconds (minimum useful value ~20); 0 turns ticks off.
+pub fn options_tick_ms(o_any: any, ms: int) -> any is
+    let o: Options = o_any
+    return Options { alt_screen: o.alt_screen, hide_cursor: o.hide_cursor, mouse: o.mouse, tick_ms: ms, title: o.title }
+end
+
+;; Window title set when the program starts.
+pub fn options_title(o_any: any, title: string) -> any is
+    let o: Options = o_any
+    return Options { alt_screen: o.alt_screen, hide_cursor: o.hide_cursor, mouse: o.mouse, tick_ms: o.tick_ms, title: title }
+end
+
+;; Translate one `poll_key` result into a message.
+fn key_to_msg(key: string) -> any is
+    if key == "ctrl+c" is return tl_msg::internal_quit_msg() end
+    if tl_text::starts_with_text(key, "mouse:") is
+        let parts: [string] = str_split(key, ":")
+        if parts.len() >= 5 is
+            return tl_msg::mouse_msg(parts[1], parts[2], __builtin_conv_str_to_int(parts[3]), __builtin_conv_str_to_int(parts[4]))
+        end
+    end
+    return tl_msg::key_msg(key)
+end
+
+;; Feed `first` to `update`, then keep feeding it whatever message the returned
+;; `cmd` produces (bounded to 8 steps). Returns (new_model, still_running).
+fn dispatch(update: fn(any, any) -> (any, fn() -> any), model: any, first: any) -> (any, bool) is
+    let mut cur_model: any = model
+    let mut cur_msg: any = first
+    let mut steps: int = 0
+    let mut alive: bool = true
+    let mut keep_going: bool = true
+    while keep_going && steps < 8 is
+        let result: (any, fn() -> any) = update(cur_model, cur_msg)
+        let (new_model, cmd) = result
+        cur_model = new_model
+        let next_msg: any = cmd()
+        if tl_msg::msg_is_quit(next_msg) is
+            alive = false
+            keep_going = false
+        else is
+            if tl_msg::msg_is(next_msg, "none") is
+                keep_going = false
+            else is
+                cur_msg = next_msg
+                steps = steps + 1
+            end
+        end
+    end
+    return (cur_model, alive)
+end
+
+;; The general loop. Returns whatever the final model was when the program quit.
+;; Right after `init`, `update` receives one resize message with the terminal size
+;; (like Bubble Tea's WindowSizeMsg); later a resize message arrives whenever the
+;; size changes (checked about once a second while ticks are on).
+pub fn run_with(init: fn() -> any, update: fn(any, any) -> (any, fn() -> any), view: fn(any) -> string, opts_any: any) -> any is
+    let opts: Options = opts_any
+    let saved: string = tl_term::enable_raw_mode()
+    if opts.alt_screen is tl_term::enter_alt_screen() end
+    if opts.hide_cursor is tl_term::hide_cursor() end
+    if opts.mouse is tl_term::enable_mouse() end
+    if opts.title != "" is tl_term::set_title(opts.title) end
+
+    let mut model: any = init()
+    let mut running: bool = true
+    let mut last_frame: string = ""
+    let (w0, h0) = tl_term::term_size()
+    let mut cur_w: int = w0
+    let mut cur_h: int = h0
+    let mut size_at: int = __builtin_time_now_ms()
+
+    let first: (any, bool) = dispatch(update, model, tl_msg::resize_msg(cur_w, cur_h))
+    let (m0, alive0) = first
+    model = m0
+    running = alive0
+
+    while running is
+        let frame: string = view(model)
+        if frame != last_frame is
+            tl_term::draw(frame)
+            last_frame = frame
+        end
+
+        let mut msg: any = tl_msg::none_msg()
+        if opts.tick_ms > 0 is
+            let t0: int = __builtin_time_now_ms()
+            let key: string = tl_keys::poll_key()
+            if key == "" is
+                let now: int = __builtin_time_now_ms()
+                let spent: int = now - t0
+                if spent < opts.tick_ms is __builtin_time_sleep_ms(opts.tick_ms - spent) end
+                msg = tl_msg::tick_msg(cur_w, cur_h)
+                if now - size_at >= 1000 is
+                    let (sw, sh) = tl_term::term_size()
+                    size_at = now
+                    if sw != cur_w || sh != cur_h is
+                        cur_w = sw
+                        cur_h = sh
+                        last_frame = ""
+                        msg = tl_msg::resize_msg(cur_w, cur_h)
+                    end
+                end
+            else is
+                msg = key_to_msg(key)
+            end
+        else is
+            let mut key: string = tl_keys::poll_key()
+            while key == "" is
+                __builtin_time_sleep_ms(15)
+                key = tl_keys::poll_key()
+            end
+            msg = key_to_msg(key)
+        end
+
+        if tl_msg::msg_is_quit(msg) is
+            running = false
+        else is
+            let step: (any, bool) = dispatch(update, model, msg)
+            let (nm, alive) = step
+            model = nm
+            running = alive
+        end
+    end
+
+    if opts.mouse is tl_term::disable_mouse() end
+    if opts.hide_cursor is tl_term::show_cursor() end
+    if opts.alt_screen is tl_term::exit_alt_screen() end
+    tl_term::flush_out()
+    tl_term::disable_raw_mode(saved)
+    return model
+end
+
+;; Run with defaults: idle tick every ~80 ms so animations keep moving (a
+;; `tui::msg_is_tick` message is how a spinner or clock animates with nobody
+;; touching the keyboard).
+pub fn run(init: fn() -> any, update: fn(any, any) -> (any, fn() -> any), view: fn(any) -> string) -> any is
+    return run_with(init, update, view, options_new())
+end
+
+;; Same loop without idle ticks: just blocks waiting for the next key — for apps
+;; that only ever react to keypresses (a static menu, a confirmation prompt, ...).
+pub fn run_no_tick(init: fn() -> any, update: fn(any, any) -> (any, fn() -> any), view: fn(any) -> string) -> any is
+    return run_with(init, update, view, options_tick_ms(options_new(), 0))
+end
