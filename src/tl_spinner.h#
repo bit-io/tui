@@ -1,0 +1,55 @@
+struct Spinner is
+    pub frames: [string]
+    pub frame_idx: int
+    pub style: any
+end
+
+fn spinner_frames_for(kind: string) -> [string] is
+    if kind == "line" is return ["-", "\\", "|", "/"] end
+    if kind == "circle" is return ["◐", "◓", "◑", "◒"] end
+    if kind == "arrow" is return ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"] end
+    if kind == "bounce" is return ["⠁", "⠂", "⠄", "⠂"] end
+    if kind == "pulse" is return ["∙", "●", "∙"] end
+    if kind == "bar" is return ["▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃"] end
+    if kind == "grow" is return ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "▊", "▋", "▌", "▍", "▎"] end
+    if kind == "arc" is return ["◜", "◠", "◝", "◞", "◡", "◟"] end
+    if kind == "toggle" is return ["⊶", "⊷"] end
+    if kind == "ellipsis" is return [".  ", ".. ", "...", " ..", "  .", "   "] end
+    ;; "dot" (default) — the classic Bubble Tea braille spinner
+    return ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+end
+
+;; The spinner kinds `spinner_new` understands.
+pub fn spinner_kinds() -> [string] is
+    return ["dot", "line", "circle", "arrow", "bounce", "pulse", "bar", "grow", "arc", "toggle", "ellipsis"]
+end
+
+;; kind: "dot" (default) | "line" | "circle" | "arrow" | "bounce" | "pulse" | "bar" |
+;;       "grow" | "arc" | "toggle" | "ellipsis"
+pub fn spinner_new(kind: string) -> any is
+    return Spinner { frames: spinner_frames_for(kind), frame_idx: 0, style: tl_style::style_new() }
+end
+
+;; A spinner that cycles through your own frames (an empty list falls back to "dot").
+pub fn spinner_custom(frames: [string]) -> any is
+    if frames.len() == 0 is return spinner_new("dot") end
+    return Spinner { frames: frames, frame_idx: 0, style: tl_style::style_new() }
+end
+
+;; Advance to the next frame — call this once per tick you want it to spin.
+pub fn spinner_tick(sp_any: any) -> any is
+    let sp: Spinner = sp_any
+    let n: int = sp.frames.len()
+    if n == 0 is return sp end
+    return Spinner { frames: sp.frames, frame_idx: (sp.frame_idx + 1) % n, style: sp.style }
+end
+
+pub fn spinner_set_style(sp_any: any, style: any) -> any is
+    let sp: Spinner = sp_any
+    return Spinner { frames: sp.frames, frame_idx: sp.frame_idx, style: style }
+end
+
+pub fn spinner_view(sp_any: any) -> string is
+    let sp: Spinner = sp_any
+    return tl_style::style_render(sp.style, sp.frames[sp.frame_idx])
+end
