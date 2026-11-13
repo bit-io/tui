@@ -1,0 +1,63 @@
+struct Confirm is
+    pub prompt: string
+    pub yes_label: string
+    pub no_label: string
+    pub selected_yes: bool
+    pub answered: bool
+    pub style: any
+    pub active_style: any
+end
+
+fn confirm_make(prompt: string, yes_label: string, no_label: string, selected_yes: bool, answered: bool, style: any, active_style: any) -> any is
+    return Confirm { prompt: prompt, yes_label: yes_label, no_label: no_label, selected_yes: selected_yes, answered: answered, style: style, active_style: active_style }
+end
+
+pub fn confirm_new(prompt: string) -> any is
+    return confirm_make(prompt, "Yes", "No", true, false, tl_style::style_new(), tl_style::style_bold(tl_style::style_fg(tl_style::style_bg(tl_style::style_new(), "cyan"), "black"), true))
+end
+
+pub fn confirm_set_labels(c_any: any, yes_label: string, no_label: string) -> any is
+    let c: Confirm = c_any
+    return confirm_make(c.prompt, yes_label, no_label, c.selected_yes, c.answered, c.style, c.active_style)
+end
+
+;; Start with "No" highlighted instead of "Yes" (useful for destructive actions).
+pub fn confirm_default_no(c_any: any) -> any is
+    let c: Confirm = c_any
+    return confirm_make(c.prompt, c.yes_label, c.no_label, false, c.answered, c.style, c.active_style)
+end
+
+;; True once the user answered (enter, y or n).
+pub fn confirm_done(c_any: any) -> bool is
+    let c: Confirm = c_any
+    return c.answered
+end
+
+;; The answer: true for yes. Meaningful once `confirm_done` is true.
+pub fn confirm_result(c_any: any) -> bool is
+    let c: Confirm = c_any
+    return c.selected_yes
+end
+
+;; Keys: left/right/tab/h/l (switch), y (yes), n (no), enter (accept the highlighted one).
+pub fn confirm_update(c_any: any, msg_any: any) -> any is
+    let c: Confirm = c_any
+    if c.answered || !tl_msg::msg_is_any_key(msg_any) is return c end
+    let key: string = tl_msg::msg_key(msg_any)
+    if key == "y" is return confirm_make(c.prompt, c.yes_label, c.no_label, true, true, c.style, c.active_style) end
+    if key == "n" is return confirm_make(c.prompt, c.yes_label, c.no_label, false, true, c.style, c.active_style) end
+    if key == "enter" is return confirm_make(c.prompt, c.yes_label, c.no_label, c.selected_yes, true, c.style, c.active_style) end
+    if key == "left" || key == "right" || key == "tab" || key == "shift+tab" || key == "h" || key == "l" is
+        return confirm_make(c.prompt, c.yes_label, c.no_label, !c.selected_yes, false, c.style, c.active_style)
+    end
+    return c
+end
+
+pub fn confirm_view(c_any: any) -> string is
+    let c: Confirm = c_any
+    let yes: string = " " + c.yes_label + " "
+    let no: string = " " + c.no_label + " "
+    let yes_v: string = if c.selected_yes is tl_style::style_render(c.active_style, yes) else is yes end
+    let no_v: string = if c.selected_yes is no else is tl_style::style_render(c.active_style, no) end
+    return tl_style::style_render(c.style, c.prompt) + "  " + yes_v + " " + no_v
+end
