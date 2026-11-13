@@ -1,0 +1,165 @@
+struct Table is
+    pub headers: [string]
+    pub rows: [[string]]
+    pub widths: [int]          ;; fixed column widths; 0 (or missing) = fit the content
+    pub cursor: int
+    pub top: int
+    pub height: int            ;; number of data rows shown at once
+    pub style: any
+    pub header_style: any
+    pub selected_style: any
+end
+
+fn table_make(headers: [string], rows: [[string]], widths: [int], cursor: int, top: int, height: int, style: any, header_style: any, selected_style: any) -> any is
+    return Table {
+        headers: headers, rows: rows, widths: widths, cursor: cursor, top: top, height: height,
+        style: style, header_style: header_style, selected_style: selected_style
+    }
+end
+
+pub fn table_new(headers: [string], rows: [[string]]) -> any is
+    let none: [int] = []
+    return table_make(headers, rows, none, 0, 0, tl_text::mini(10, tl_text::maxi(1, rows.len())), tl_style::style_new(),
+        tl_style::style_bold(tl_style::style_fg(tl_style::style_new(), "cyan"), true), tl_style::style_bold(tl_style::style_fg(tl_style::style_new(), "black"), true))
+end
+
+pub fn table_set_rows(t_any: any, rows: [[string]]) -> any is
+    let t: Table = t_any
+    return table_make(t.headers, rows, t.widths, 0, 0, t.height, t.style, t.header_style, t.selected_style)
+end
+
+pub fn table_set_height(t_any: any, height: int) -> any is
+    let t: Table = t_any
+    return table_make(t.headers, t.rows, t.widths, t.cursor, t.top, tl_text::maxi(1, height), t.style, t.header_style, t.selected_style)
+end
+
+;; Fixed column widths (one per column; 0 = fit the content). Longer cells are cut
+;; with an ellipsis.
+pub fn table_set_widths(t_any: any, widths: [int]) -> any is
+    let t: Table = t_any
+    return table_make(t.headers, t.rows, widths, t.cursor, t.top, t.height, t.style, t.header_style, t.selected_style)
+end
+
+;; `header_style` for the header row, `selected_style` for the highlighted row
+;; (default selection is bold; give it a background color to stand out).
+pub fn table_set_styles(t_any: any, header_style: any, selected_style: any) -> any is
+    let t: Table = t_any
+    return table_make(t.headers, t.rows, t.widths, t.cursor, t.top, t.height, t.style, header_style, selected_style)
+end
+
+pub fn table_set_style(t_any: any, style: any) -> any is
+    let t: Table = t_any
+    return table_make(t.headers, t.rows, t.widths, t.cursor, t.top, t.height, style, t.header_style, t.selected_style)
+end
+
+fn table_move(t_any: any, cursor: int) -> any is
+    let t: Table = t_any
+    let n: int = t.rows.len()
+    let c: int = tl_text::clampi(cursor, 0, tl_text::maxi(0, n - 1))
+    let mut top: int = t.top
+    if c < top is top = c end
+    if c >= top + t.height is top = c - t.height + 1 end
+    top = tl_text::clampi(top, 0, tl_text::maxi(0, n - t.height))
+    return table_make(t.headers, t.rows, t.widths, c, top, t.height, t.style, t.header_style, t.selected_style)
+end
+
+pub fn table_set_cursor(t_any: any, index: int) -> any is
+    return table_move(t_any, index)
+end
+
+pub fn table_row_count(t_any: any) -> int is
+    let t: Table = t_any
+    return t.rows.len()
+end
+
+pub fn table_selected_index(t_any: any) -> int is
+    let t: Table = t_any
+    return t.cursor
+end
+
+;; The highlighted row's cells (an empty list for an empty table).
+pub fn table_selected_row(t_any: any) -> [string] is
+    let t: Table = t_any
+    if t.rows.len() == 0 is
+        let none: [string] = []
+        return none
+    end
+    return t.rows[t.cursor]
+end
+
+;; Keys: up, down, pgup, pgdown, home, end, and the mouse wheel.
+pub fn table_update(t_any: any, msg_any: any) -> any is
+    let t: Table = t_any
+    if tl_msg::msg_is_wheel_up(msg_any) is return table_move(t, t.cursor - 1) end
+    if tl_msg::msg_is_wheel_down(msg_any) is return table_move(t, t.cursor + 1) end
+    if !tl_msg::msg_is_any_key(msg_any) is return t end
+    let key: string = tl_msg::msg_key(msg_any)
+    if key == "up" is return table_move(t, t.cursor - 1) end
+    if key == "down" is return table_move(t, t.cursor + 1) end
+    if key == "pgup" is return table_move(t, t.cursor - t.height) end
+    if key == "pgdown" is return table_move(t, t.cursor + t.height) end
+    if key == "home" is return table_move(t, 0) end
+    if key == "end" is return table_move(t, t.rows.len() - 1) end
+    return t
+end
+
+;; Width of column `ci`: the fixed one if given, else the widest cell/header.
+fn column_width(t: Table, ci: int) -> int is
+    if ci < t.widths.len() && t.widths[ci] > 0 is return t.widths[ci] end
+    let mut w: int = 0
+    if ci < t.headers.len() is w = tl_text::visible_len(t.headers[ci]) end
+    for row in t.rows is
+        if ci < row.len() && tl_text::visible_len(row[ci]) > w is w = tl_text::visible_len(row[ci]) end
+    end
+    return w
+end
+
+fn table_line(t: Table, cells: [string], ncols: int, widths: [int]) -> string is
+    let mut parts: [string] = []
+    let mut ci: int = 0
+    while ci < ncols is
+        let cell: string = if ci < cells.len() is cells[ci] else is "" end
+        parts.push(tl_text::pad_right(tl_text::truncate_str(cell, widths[ci], "…"), widths[ci]))
+        ci = ci + 1
+    end
+    return iter_join(parts, " │ ")
+end
+
+pub fn table_view(t_any: any) -> string is
+    let t: Table = t_any
+    let mut ncols: int = t.headers.len()
+    for row in t.rows is
+        if row.len() > ncols is ncols = row.len() end
+    end
+    let mut widths: [int] = []
+    let mut ci: int = 0
+    while ci < ncols is
+        widths.push(column_width(t, ci))
+        ci = ci + 1
+    end
+
+    let mut out: [string] = []
+    let header: string = table_line(t, t.headers, ncols, widths)
+    out.push(tl_style::style_render(t.header_style, header))
+    let mut rule: [string] = []
+    ci = 0
+    while ci < ncols is
+        rule.push(tl_text::rep_str("─", widths[ci]))
+        ci = ci + 1
+    end
+    out.push(iter_join(rule, "─┼─"))
+
+    let n: int = t.rows.len()
+    let end_idx: int = tl_text::mini(n, t.top + t.height)
+    let mut i: int = t.top
+    while i < end_idx is
+        let line: string = table_line(t, t.rows[i], ncols, widths)
+        if i == t.cursor is
+            out.push(tl_style::style_render(t.selected_style, line))
+        else is
+            out.push(line)
+        end
+        i = i + 1
+    end
+    return tl_style::style_render(t.style, iter_join(out, "\n"))
+end
