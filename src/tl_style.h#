@@ -382,7 +382,7 @@ pub fn style_render(s_any: any, text: string) -> string is
         let bottom: string = border_prefix + bl + tl_text::rep_str(h, inner_width) + br + border_reset
         let mut boxed: [string] = []
         boxed.push(top)
-        for line in body is
+        for line in framed is
             boxed.push(border_prefix + v + border_reset + line + border_prefix + v + border_reset)
         end
         boxed.push(bottom)
