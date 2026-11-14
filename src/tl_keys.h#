@@ -93,7 +93,7 @@ end
 
 ;; SGR mouse report: params "<b;x;y", final "M" (press/drag) or "m" (release).
 fn decode_mouse(params: string, fin: string) -> string is
-    let body: string = params[1..char_count(params)]
+    let body: string = params[1..tl_text::char_count(params)]
     let parts: [string] = str_split(body, ";")
     if parts.len() < 3 is return "esc" end
     let b: int = __builtin_conv_str_to_int(parts[0])
