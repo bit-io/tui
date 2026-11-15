@@ -43,6 +43,20 @@ pub fn term_size() -> (int, int) is
     return (w, h)
 end
 
+;; (width, height) with as little work as possible: ONE `stty` shell-out and no
+;; trimming helpers. Unlike `term_size` it does NOT invent 80x24 when the read
+;; fails — it returns (0, 0) so a polling caller can keep its previous size
+;; instead of "resizing" on a hiccup. Meant for polling every few hundred ms.
+pub fn term_size_fast() -> (int, int) is
+    let out: string = __builtin_process_run("stty size -F /dev/tty 2>/dev/null")
+    let parts: [string] = str_split(out, " ")
+    if parts.len() < 2 is return (0, 0) end
+    let h: int = __builtin_conv_str_to_int(tl_text::trim_str(parts[0]))
+    let w: int = __builtin_conv_str_to_int(tl_text::trim_str(parts[1]))
+    if w <= 0 || h <= 0 is return (0, 0) end
+    return (w, h)
+end
+
 ;; Put the terminal into raw mode: no line buffering, no local echo, and a
 ;; ~100ms read timeout (`min 0 time 1`) so a single key-read never blocks
 ;; the render loop for long — this is what gives `poll_key` its "is a key
