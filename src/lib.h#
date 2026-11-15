@@ -1,6 +1,7 @@
 mod tl_text
 mod tl_term
 mod tl_keys
+mod tl_input
 mod tl_msg
 mod tl_color
 mod tl_style
@@ -112,6 +113,12 @@ end
 ;; (width, height) in one call — one `stty` shell-out instead of two.
 pub fn term_size() -> (int, int) is
     return tl_term::term_size()
+end
+
+;; Like `term_size`, but cheaper per call; returns (0, 0) when the size can't be
+;; read (instead of guessing 80x24) so polling callers can keep their old size.
+pub fn term_size_fast() -> (int, int) is
+    return tl_term::term_size_fast()
 end
 
 ;; Put the terminal into raw mode: no line buffering, no local echo, and a
@@ -1295,4 +1302,18 @@ end
 
 pub fn version() -> string is
     return "tui 0.2.0 — a Bubble Tea-inspired terminal UI toolkit for H#"
+end
+
+;; -- tl_input ----------------------------------------------------
+
+;; New buffered key reader (see tl_input). Keep it in a `let mut` and pass
+;; `&mut` to `input_poll`.
+pub fn input_new() -> any is
+    return tl_input::input_new()
+end
+
+;; Next key from the buffered reader; "" if nothing arrived within ~100 ms.
+;; Also yields "paste_start" / "paste_end" (bracketed paste) and "alt+enter".
+pub fn input_poll(inp: &mut any) -> string is
+    return tl_input::input_poll(inp)
 end
