@@ -1,0 +1,96 @@
+struct InputBuf is
+    pub buf: [int]
+    pub pos: int
+end
+
+;; Whatever bytes are available in a single read(2), up to 64.
+fn read_burst() -> [int] is
+    let cmd: string = "dd if=/dev/tty bs=64 count=1 2>/dev/null | od -An -v -tu1 | tr -s ' \\n' ' '"
+    return tl_keys::parse_codes(__builtin_process_run(cmd))
+end
+
+;; A fresh, empty reader state.
+pub fn input_new() -> any is
+    let empty: [int] = []
+    return InputBuf { buf: empty, pos: 0 }
+end
+
+;; Bytes of one complete UTF-8 character starting at `i`, clipped to the buffer.
+fn utf8_len_at(buf: [int], i: int) -> int is
+    let want: int = 1 + tl_keys::utf8_extra_bytes(buf[i])
+    if i + want > buf.len() is return buf.len() - i end
+    return want
+end
+
+;; Decode ONE key from `buf` starting at `start`. Returns (key, bytes consumed).
+fn decode_at(buf: [int], start: int) -> (string, int) is
+    let b: int = buf[start]
+    let left: int = buf.len() - start
+    if b == 27 is
+        if left == 1 is return ("esc", 1) end
+        let c2: int = buf[start + 1]
+        if c2 == 91 is
+            ;; CSI: "[" + parameter bytes + one final byte (0x40..0x7E)
+            let mut seq: string = ""
+            let mut i: int = start + 2
+            while i < buf.len() is
+                seq = seq + tl_keys::ascii_char(buf[i])
+                if buf[i] >= 64 && buf[i] <= 126 is
+                    i = i + 1
+                    break
+                end
+                i = i + 1
+            end
+            return (tl_keys::decode_csi(seq), i - start)
+        end
+        if c2 == 79 is
+            if left < 3 is return ("esc", left) end
+            let name: string = tl_keys::csi_base_name(tl_keys::ascii_char(buf[start + 2]), 0)
+            if name == "" is return ("esc", 3) end
+            return (name, 3)
+        end
+        if c2 == 13 || c2 == 10 is return ("alt+enter", 2) end
+        if c2 == 127 is return ("alt+backspace", 2) end
+        if c2 == 32 is return ("alt+space", 2) end
+        if c2 > 32 && c2 < 127 is return ("alt+" + tl_keys::ascii_char(c2), 2) end
+        ;; ESC followed by something else: a lone Escape, the rest is a new key
+        return ("esc", 1)
+    end
+    if b == 13 || b == 10 is return ("enter", 1) end
+    if b == 9 is return ("tab", 1) end
+    if b == 127 || b == 8 is return ("backspace", 1) end
+    if b == 32 is return ("space", 1) end
+    let ctrl: string = tl_keys::ctrl_key_name(b)
+    if ctrl != "" is return (ctrl, 1) end
+    if b >= 33 && b <= 126 is return (tl_keys::ascii_char(b), 1) end
+    let n: int = utf8_len_at(buf, start)
+    if n > 1 is
+        let mut chunk: [int] = []
+        let mut k: int = 0
+        while k < n is
+            chunk.push(buf[start + k])
+            k = k + 1
+        end
+        return (tl_keys::bytes_to_text(chunk), n)
+    end
+    return ("", 1)
+end
+
+;; Next key, or "" when nothing arrived within the ~100 ms read window.
+pub fn input_poll(inp: &mut any) -> string is
+    let st: InputBuf = inp
+    let mut buf: [int] = st.buf
+    let mut pos: int = st.pos
+    if pos >= buf.len() is
+        buf = read_burst()
+        pos = 0
+        if buf.len() == 0 is
+            inp = InputBuf { buf: buf, pos: 0 }
+            return ""
+        end
+    end
+    let (key, used) = decode_at(buf, pos)
+    pos = pos + used
+    inp = InputBuf { buf: buf, pos: pos }
+    return key
+end
