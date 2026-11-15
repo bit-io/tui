@@ -5,12 +5,14 @@ end
 
 ;; Whatever bytes are available in a single read(2) (up to 32) — used for the rest of
 ;; an escape sequence, which the terminal sends in one burst.
-fn read_chunk() -> [int] is
+;;@internal
+pub fn read_chunk() -> [int] is
     let cmd: string = "dd if=/dev/tty bs=32 count=1 2>/dev/null | od -An -v -tu1 | tr -s ' \\n' ' '"
     return parse_codes(__builtin_process_run(cmd))
 end
 
-fn parse_codes(raw: string) -> [int] is
+;;@internal
+pub fn parse_codes(raw: string) -> [int] is
     let mut out: [int] = []
     let pieces: [string] = str_split(raw, " ")
     for part in pieces is
@@ -21,7 +23,8 @@ fn parse_codes(raw: string) -> [int] is
 end
 
 ;; One ASCII character from its code (32..126); "" for anything else.
-fn ascii_char(code: int) -> string is
+;;@internal
+pub fn ascii_char(code: int) -> string is
     if code < 32 || code > 126 is return "" end
     let table: string = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
     return table[code - 32..code - 31]
@@ -35,7 +38,8 @@ end
 
 ;; The real characters for a run of UTF-8 bytes (shell `printf` rebuilds them
 ;; faithfully, so "ą", "ł", "€" and emoji come through as typed).
-fn bytes_to_text(codes: [int]) -> string is
+;;@internal
+pub fn bytes_to_text(codes: [int]) -> string is
     let mut fmt: string = ""
     for c in codes is fmt = fmt + "\\" + oct3(c) end
     let out: string = __builtin_process_run("printf '" + fmt + "'")
@@ -44,7 +48,8 @@ fn bytes_to_text(codes: [int]) -> string is
 end
 
 ;; Name of a CSI/SS3 key from its final byte (and first numeric parameter).
-fn csi_base_name(fin: string, first: int) -> string is
+;;@internal
+pub fn csi_base_name(fin: string, first: int) -> string is
     if fin == "A" is return "up" end
     if fin == "B" is return "down" end
     if fin == "C" is return "right" end
@@ -116,7 +121,8 @@ fn decode_mouse(params: string, fin: string) -> string is
     return "mouse:" + button + ":" + action + ":" + parts[1] + ":" + parts[2]
 end
 
-fn decode_csi(seq: string) -> string is
+;;@internal
+pub fn decode_csi(seq: string) -> string is
     let n: int = tl_text::char_count(seq)
     if n == 0 is return "esc" end
     let fin: string = seq[n - 1..n]
@@ -133,18 +139,23 @@ fn decode_csi(seq: string) -> string is
     if parts.len() >= 2 && parts[1] != "" && tl_text::is_all_digits(parts[1]) is
         modn = __builtin_conv_str_to_int(parts[1])
     end
+    ;; bracketed paste markers: ESC[200~ ... ESC[201~
+    if fin == "~" && first == 200 is return "paste_start" end
+    if fin == "~" && first == 201 is return "paste_end" end
     let base: string = csi_base_name(fin, first)
     if base == "" is return "esc" end
     return csi_with_mod(base, modn)
 end
 
-fn ctrl_key_name(code: int) -> string is
+;;@internal
+pub fn ctrl_key_name(code: int) -> string is
     if code < 1 || code > 26 is return "" end
     let letters: string = "abcdefghijklmnopqrstuvwxyz"
     return "ctrl+" + letters[code - 1..code]
 end
 
-fn utf8_extra_bytes(code: int) -> int is
+;;@internal
+pub fn utf8_extra_bytes(code: int) -> int is
     if code >= 240 is return 3 end
     if code >= 224 is return 2 end
     if code >= 192 is return 1 end
@@ -173,6 +184,7 @@ fn decode_escape(rest: [int]) -> string is
         if name == "" is return "esc" end
         return name
     end
+    if c2 == 13 || c2 == 10 is return "alt+enter" end
     if c2 == 127 is return "alt+backspace" end
     if c2 == 32 is return "alt+space" end
     if c2 > 32 && c2 < 127 is return "alt+" + ascii_char(c2) end
@@ -227,6 +239,7 @@ pub fn is_special_key(key: string) -> bool is
     if key == "esc" || key == "space" is return true end
     if tl_text::starts_with_text(key, "ctrl+") || tl_text::starts_with_text(key, "alt+") || tl_text::starts_with_text(key, "shift+") is return true end
     if tl_text::starts_with_text(key, "mouse:") is return true end
+    if key == "paste_start" || key == "paste_end" is return true end
     if is_function_key(key) is return true end
     return false
 end
